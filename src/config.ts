@@ -3,6 +3,7 @@ export type Config = {
 		apiKey: string;
 		basePath: string;
 	};
+	txStatusPollingIntervalSeconds: number;
 	server: {
 		hostname: string;
 		port: number;
@@ -26,6 +27,9 @@ export function configFromProcessEnv(): Config {
 			apiKey: fromProcessEnv("MULTIBAAS_API_KEY"),
 			basePath: fromProcessEnv("MULTIBAAS_BASE_PATH"),
 		},
+		txStatusPollingIntervalSeconds: parseInt(
+			fromProcessEnv("TX_STATUS_POLLING_INTERVAL_SECONDS"),
+		),
 		server: {
 			hostname: fromProcessEnv("SERVER_HOSTNAME"),
 			port: parseInt(fromProcessEnv("SERVER_PORT")),

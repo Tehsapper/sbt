@@ -1,14 +1,20 @@
 import * as MultiBaas from "@curvegrid/multibaas-sdk";
 import { isAxiosError } from "axios";
 import { ethers } from "ethers";
-import { EthereumAddress, TransactionHash } from "./core.js";
+import { EthereumAddress, TransactionHash } from "../core.js";
 import { ILogObj, Logger } from "tslog";
+import { TransactionRepo } from "../repo/TransactionRepo.js";
 
 type SignedTransaction = string;
 
-export class SbtMint {
+export interface SbtMint {
+	startMinting(to: EthereumAddress): Promise<TransactionHash>;
+}
+
+export class SbtMintImpl implements SbtMint {
 	private contractsApi: MultiBaas.ContractsApi;
 	private chainsApi: MultiBaas.ChainsApi;
+	private transactionRepo: TransactionRepo;
 	private wallet: ethers.Wallet;
 	private chain: MultiBaas.ChainName;
 	private logger: Logger<ILogObj>;
@@ -16,6 +22,7 @@ export class SbtMint {
 	constructor(
 		contractsApi: MultiBaas.ContractsApi,
 		chainsApi: MultiBaas.ChainsApi,
+		transactionRepo: TransactionRepo,
 		wallet: ethers.Wallet,
 		chain: MultiBaas.ChainName = MultiBaas.ChainName.Ethereum,
 		logger: Logger<ILogObj> = new Logger({
@@ -24,6 +31,7 @@ export class SbtMint {
 	) {
 		this.contractsApi = contractsApi;
 		this.chainsApi = chainsApi;
+		this.transactionRepo = transactionRepo;
 		this.wallet = wallet;
 		this.chain = chain;
 		this.logger = logger;
@@ -40,6 +48,12 @@ export class SbtMint {
 		const signedTx = await this.signTx(tx);
 		const txHash = await this.sendSignedTx(signedTx);
 		this.logger.info("Minting SBT transaction submitted", { txHash });
+		await this.transactionRepo.save({
+			hash: txHash,
+			status: "pending",
+			submissionTime: new Date(),
+		});
+		this.logger.info("Minting SBT transaction state saved", { txHash });
 		return txHash;
 	}
 
@@ -120,15 +134,14 @@ export class SbtMint {
 	private async sendSignedTx(
 		signedTx: SignedTransaction,
 	): Promise<TransactionHash> {
-		const result = await this.chainsApi.submitSignedTransaction(
+		const response = await this.chainsApi.submitSignedTransaction(
 			this.chain,
 			{
 				signedTx,
 			},
 		);
-		this.logger.info("Transaction submitted", {
-			result: result.data.result,
-		});
-		return result.data.result.tx.hash;
+		const result = response.data.result;
+		this.logger.info("Transaction submitted", { result });
+		return result.tx.hash;
 	}
 }

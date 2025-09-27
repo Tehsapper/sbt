@@ -1,6 +1,14 @@
 import { ethers } from "ethers";
 
-export class EthersSignatureVerifier {
+export interface SignatureVerifier {
+	verify(
+		message: string,
+		signature: string,
+		address: string,
+	): Promise<boolean>;
+}
+
+export class EthersSignatureVerifier implements SignatureVerifier {
 	async verify(
 		message: string,
 		signature: string,

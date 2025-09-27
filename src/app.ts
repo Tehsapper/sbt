@@ -1,14 +1,22 @@
 import express from "express";
 import dotenv from "dotenv";
 import * as MultiBaas from "@curvegrid/multibaas-sdk";
-import { SbtMint } from "./mint.js";
+import { SbtMintImpl } from "./service/SbtMint.js";
 import { configFromProcessEnv } from "./config.js";
 import { ethers } from "ethers";
-import { EthersSignatureVerifier } from "./SignatureVerifier.js";
+import { EthersSignatureVerifier } from "./service/SignatureVerifier.js";
+import { ClaimController } from "./controller/ClaimController.js";
+import { TransactionCheckerImpl } from "./service/TransactionChecker.js";
+import { InMemoryTransactionRepo } from "./repo/InMemoryTransactionRepo.js";
+import { Logger } from "tslog";
 
 dotenv.config({ path: ".env" });
 
 const config = configFromProcessEnv();
+
+const logger = new Logger({
+	name: "app",
+});
 
 const multiBaasConfig = new MultiBaas.Configuration({
 	basePath: config.multiBaas.basePath,
@@ -17,46 +25,46 @@ const multiBaasConfig = new MultiBaas.Configuration({
 
 const multiBaasContractsApi = new MultiBaas.ContractsApi(multiBaasConfig);
 const multiBaasChainsApi = new MultiBaas.ChainsApi(multiBaasConfig);
-const multiBaasTxManagerApi = new MultiBaas.TxmApi(multiBaasConfig);
 
 // TODO: use MultiBaaS Cloud Wallet with a secure provider.
 const wallet = new ethers.Wallet(config.wallet.privateKey);
 
+const transactionRepo = new InMemoryTransactionRepo();
+
 const signatureVerifier = new EthersSignatureVerifier();
-const sbtMint = new SbtMint(multiBaasContractsApi, multiBaasChainsApi, wallet);
+const sbtMint = new SbtMintImpl(
+	multiBaasContractsApi,
+	multiBaasChainsApi,
+	transactionRepo,
+	wallet,
+);
+const transactionChecker = new TransactionCheckerImpl(
+	transactionRepo,
+	multiBaasChainsApi,
+);
+
+// TODO: consider using other means to track transaction status:
+// - use MultiBaaS webhooks
+// - some kind of (cron?) job or scheduler library
+// - k8s cronjob or AWS Lambda function
+setInterval(async () => {
+	try {
+		await transactionChecker.updatePendingTransactions();
+	} catch (error) {
+		logger.error("Error updating pending transactions", error);
+	}
+}, config.txStatusPollingIntervalSeconds * 1000);
+
+const claimController = new ClaimController(sbtMint, signatureVerifier);
 
 const app = express();
 
 app.use(express.json());
 
-app.post("/claim", async (req, res) => {
-	const to = req.query.to as string;
-	if (!to) {
-		res.status(400).json({ error: '"to" query parameter is required' });
-		return;
-	}
-	const signature = req.query.signature as string;
-	if (!signature) {
-		res.status(400).json({
-			error: '"signature" query parameter is required',
-		});
-		return;
-	}
-	const verified = await signatureVerifier.verify(to, signature, to);
-	if (!verified) {
-		res.status(401).json({ error: "Could not verify signature" });
-		return;
-	}
-	try {
-		const txHash = await sbtMint.startMinting(to);
-		res.json({ txHash });
-	} catch (error) {
-		res.status(500).json({ error: "Failed to start minting" });
-	}
-});
+app.post("/claim", (req, res) => claimController.handleClaim(req, res));
 
 app.listen(config.server.port, config.server.hostname, () => {
-	console.log(
+	logger.info(
 		`HTTP server is running on ${config.server.hostname}:${config.server.port}`,
 	);
 });
