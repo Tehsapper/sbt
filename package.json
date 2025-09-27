@@ -1,0 +1,26 @@
+{
+  "name": "sbt",
+  "version": "1.0.0",
+  "description": "SBT minting backend",
+  "license": "MIT",
+  "author": "Aleksandr Sorokin",
+  "type": "module",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@curvegrid/multibaas-sdk": "1.0.12",
+    "dotenv": "^17.2.2",
+    "ethers": "^6.15.0",
+    "express": "^5.0.0"
+  }
+}
