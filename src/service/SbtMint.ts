@@ -7,6 +7,37 @@ import { TransactionRepo } from "../repo/TransactionRepo.js";
 
 type SignedTransaction = string;
 
+export class SbtMintFailure extends Error {
+	constructor(message: string, cause?: unknown) {
+		super(message);
+		this.cause = cause;
+	}
+}
+
+export class SbtMintContractCallFailure extends SbtMintFailure {
+	constructor(message: string, cause?: unknown) {
+		super(message, cause);
+	}
+}
+
+export class SbtMintChainQueryFailure extends SbtMintFailure {
+	constructor(message: string, cause?: unknown) {
+		super(message, cause);
+	}
+}
+
+export class SbtMintSigningFailure extends SbtMintFailure {
+	constructor(message: string, cause?: unknown) {
+		super(message, cause);
+	}
+}
+
+export class SbtMintSubmissionFailure extends SbtMintFailure {
+	constructor(message: string, cause?: unknown) {
+		super(message, cause);
+	}
+}
+
 export interface SbtMint {
 	startMinting(to: EthereumAddress): Promise<TransactionHash>;
 }
@@ -71,41 +102,46 @@ export class SbtMintImpl implements SbtMint {
 		};
 
 		try {
-			const resp = await this.contractsApi.callContractFunction(
+			const response = await this.contractsApi.callContractFunction(
 				this.chain,
 				deployedAddressOrAlias,
 				contractLabel,
 				contractMethod,
 				payload,
 			);
+			const result = response.data.result;
 			this.logger.info(
 				`${contractMethod} contract call result:\n`,
-				resp.data.result,
+				result,
 			);
-			if (resp.data.result.kind !== "TransactionToSignResponse") {
-				throw new Error(
-					"Expected TransactionToSignResponse, got " +
-						resp.data.result.kind,
+			if (result.kind !== "TransactionToSignResponse") {
+				throw new SbtMintContractCallFailure(
+					"Expected TransactionToSignResponse, got " + result.kind,
 				);
 			}
-			const tx = resp.data.result.tx;
-			return tx;
+			return result.tx;
 		} catch (e) {
 			if (isAxiosError(e)) {
-				this.logger.error(
-					`MultiBaas API error with status '${e.response?.data.status}' and message: ${e.response?.data.message}`,
+				throw new SbtMintContractCallFailure(
+					`MultiBaas contract call API failed with status code '${e.response?.data.status}' and message: ${e.response?.data.message}`,
+					e,
 				);
-			} else {
-				this.logger.error("An unexpected error occurred:", e);
 			}
-			throw e;
+			throw new SbtMintContractCallFailure(
+				"Failed to call contract function",
+				e,
+			);
 		}
 	}
 
 	private async getChainId(): Promise<number> {
-		// TODO: can this be cached?
-		const resp = await this.chainsApi.getChainStatus(this.chain);
-		return resp.data.result.chainID;
+		try {
+			// TODO: can this be cached?
+			const resp = await this.chainsApi.getChainStatus(this.chain);
+			return resp.data.result.chainID;
+		} catch (e) {
+			throw new SbtMintChainQueryFailure("Failed to get chain status", e);
+		}
 	}
 
 	private async signTx(
@@ -126,22 +162,33 @@ export class SbtMintImpl implements SbtMint {
 			chainId: chainId,
 		};
 
-		const signedTx = await this.wallet.signTransaction(formattedTx);
-		this.logger.info("Transaction signed", { signedTx });
-		return signedTx;
+		try {
+			const signedTx = await this.wallet.signTransaction(formattedTx);
+			this.logger.info("Transaction signed", { signedTx });
+			return signedTx;
+		} catch (e) {
+			throw new SbtMintSigningFailure("Failed to sign transaction", e);
+		}
 	}
 
 	private async sendSignedTx(
 		signedTx: SignedTransaction,
 	): Promise<TransactionHash> {
-		const response = await this.chainsApi.submitSignedTransaction(
-			this.chain,
-			{
-				signedTx,
-			},
-		);
-		const result = response.data.result;
-		this.logger.info("Transaction submitted", { result });
-		return result.tx.hash;
+		try {
+			const response = await this.chainsApi.submitSignedTransaction(
+				this.chain,
+				{
+					signedTx,
+				},
+			);
+			const result = response.data.result;
+			this.logger.info("Transaction submitted", { result });
+			return result.tx.hash;
+		} catch (e) {
+			throw new SbtMintSubmissionFailure(
+				"Failed to submit signed transaction",
+				e,
+			);
+		}
 	}
 }

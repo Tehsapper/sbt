@@ -4,7 +4,6 @@ import * as MultiBaas from "@curvegrid/multibaas-sdk";
 import { SbtMintImpl } from "./service/SbtMint.js";
 import { configFromProcessEnv } from "./config.js";
 import { ethers } from "ethers";
-import { EthersSignatureVerifier } from "./service/SignatureVerifier.js";
 import { ClaimController } from "./controller/ClaimController.js";
 import { TransactionCheckerImpl } from "./service/TransactionChecker.js";
 import { InMemoryTransactionRepo } from "./repo/InMemoryTransactionRepo.js";
@@ -31,7 +30,6 @@ const wallet = new ethers.Wallet(config.wallet.privateKey);
 
 const transactionRepo = new InMemoryTransactionRepo();
 
-const signatureVerifier = new EthersSignatureVerifier();
 const sbtMint = new SbtMintImpl(
 	multiBaasContractsApi,
 	multiBaasChainsApi,
@@ -55,7 +53,7 @@ setInterval(async () => {
 	}
 }, config.txStatusPollingIntervalSeconds * 1000);
 
-const claimController = new ClaimController(sbtMint, signatureVerifier);
+const claimController = new ClaimController(sbtMint);
 
 const app = express();
 
