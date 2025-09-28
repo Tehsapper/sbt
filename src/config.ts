@@ -4,6 +4,13 @@ export type Config = {
 		basePath: string;
 	};
 	txStatusPollingIntervalSeconds: number;
+	postgres: {
+		host: string;
+		port: number;
+		user: string;
+		password: string;
+		database: string;
+	};
 	server: {
 		hostname: string;
 		port: number;
@@ -30,6 +37,13 @@ export function configFromProcessEnv(): Config {
 		txStatusPollingIntervalSeconds: parseInt(
 			fromProcessEnv("TX_STATUS_POLLING_INTERVAL_SECONDS"),
 		),
+		postgres: {
+			host: fromProcessEnv("POSTGRES_HOST"),
+			port: parseInt(fromProcessEnv("POSTGRES_PORT")),
+			user: fromProcessEnv("POSTGRES_USER"),
+			password: fromProcessEnv("POSTGRES_PASSWORD"),
+			database: fromProcessEnv("POSTGRES_DATABASE"),
+		},
 		server: {
 			hostname: fromProcessEnv("SERVER_HOSTNAME"),
 			port: parseInt(fromProcessEnv("SERVER_PORT")),

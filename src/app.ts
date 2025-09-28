@@ -6,10 +6,12 @@ import { configFromProcessEnv } from "./config.js";
 import { ethers } from "ethers";
 import { ClaimController } from "./controller/ClaimController.js";
 import { TransactionCheckerImpl } from "./service/TransactionChecker.js";
-import { InMemoryTransactionRepo } from "./repo/InMemoryTransactionRepo.js";
+import { PostgresTransactionRepo } from "./repo/PostgresTransactionRepo.js";
 import { Logger } from "tslog";
 import { SystemClock } from "./service/Clock.js";
 import { TransactionStatusPoll } from "./process/TransactionStatusPoll.js";
+import postgres from "postgres";
+import prexit from "prexit";
 
 dotenv.config({ path: ".env" });
 
@@ -30,7 +32,17 @@ const multiBaasChainsApi = new MultiBaas.ChainsApi(multiBaasConfig);
 // TODO: use MultiBaaS Cloud Wallet with a secure provider.
 const wallet = new ethers.Wallet(config.wallet.privateKey);
 
-const transactionRepo = new InMemoryTransactionRepo();
+const db = postgres({
+	host: config.postgres.host,
+	port: config.postgres.port,
+	user: config.postgres.user,
+	password: config.postgres.password,
+	database: config.postgres.database,
+});
+
+const transactionRepo = new PostgresTransactionRepo(db);
+await transactionRepo.setup();
+
 const clock = new SystemClock();
 
 const sbtMint = new SbtMintImpl(
@@ -49,8 +61,10 @@ const transactionChecker = new TransactionCheckerImpl(
 // - use MultiBaaS webhooks to avoid polling
 // - some kind of (cron?) job or scheduler library
 // - k8s cronjob or AWS Lambda function
-const transactionStatusPoll = new TransactionStatusPoll(transactionChecker, config.txStatusPollingIntervalSeconds);
-transactionStatusPoll.start();
+const transactionStatusPoll = new TransactionStatusPoll(
+	transactionChecker,
+	config.txStatusPollingIntervalSeconds,
+);
 
 const claimController = new ClaimController(sbtMint);
 
@@ -63,10 +77,17 @@ app.all("*everything", (req, res) => {
 	res.status(404).json({ error: "Not found" });
 });
 
-app.listen(config.server.port, config.server.hostname, () => {
+const server = app.listen(config.server.port, config.server.hostname, () => {
 	logger.info(
 		`HTTP server is running on ${config.server.hostname}:${config.server.port}`,
 	);
 });
 
-export default app;
+transactionStatusPoll.start();
+
+prexit(async () => {
+	logger.info("Shutting down...");
+	transactionStatusPoll.stop();
+	await new Promise((r) => server.close(r));
+	await db.end({ timeout: 10 });
+});

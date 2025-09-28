@@ -11,9 +11,11 @@ import {
 import { TransactionState } from "../../src/core.js";
 
 class TransactionRepoMock implements TransactionRepo {
-	save = jest.fn();
+	create = jest.fn();
+	update = jest.fn();
 	get = jest.fn();
 	getAllPending = jest.fn();
+	setup = jest.fn();
 }
 
 class ChainsApiMock extends MultiBaas.ChainsApi {
@@ -96,7 +98,7 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 					},
 				},
 			});
-			ctx.transactionRepoMock.save.mockRejectedValue(
+			ctx.transactionRepoMock.update.mockRejectedValue(
 				new Error("Repo update failed"),
 			);
 
@@ -121,7 +123,7 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 
 			await ctx.transactionChecker.updatePendingTransactions();
 
-			expect(ctx.transactionRepoMock.save).not.toHaveBeenCalled();
+			expect(ctx.transactionRepoMock.update).not.toHaveBeenCalled();
 		},
 	);
 
@@ -141,7 +143,7 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 
 			await ctx.transactionChecker.updatePendingTransactions();
 
-			expect(ctx.transactionRepoMock.save).toHaveBeenCalledWith({
+			expect(ctx.transactionRepoMock.update).toHaveBeenCalledWith({
 				...pendingTx1,
 				status: "confirmed",
 			});
@@ -163,7 +165,7 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 
 			await ctx.transactionChecker.updatePendingTransactions();
 
-			expect(ctx.transactionRepoMock.save).toHaveBeenCalledWith({
+			expect(ctx.transactionRepoMock.update).toHaveBeenCalledWith({
 				...pendingTx1,
 				status: "failed",
 			});

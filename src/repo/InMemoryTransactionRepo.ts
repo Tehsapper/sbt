@@ -3,7 +3,19 @@ import { TransactionHash, TransactionState } from "../core.js";
 export class InMemoryTransactionRepo {
 	private transactions: Map<TransactionHash, TransactionState> = new Map();
 
-	async save(tx: TransactionState): Promise<void> {
+	async setup(): Promise<void> {
+		// reset map?
+		this.transactions.clear();
+	}
+
+	async create(tx: TransactionState): Promise<void> {
+		this.transactions.set(tx.hash, tx);
+	}
+
+	async update(tx: TransactionState): Promise<void> {
+		if (!this.transactions.has(tx.hash)) {
+			throw new Error(`Transaction ${tx.hash} not found`);
+		}
 		this.transactions.set(tx.hash, tx);
 	}
 

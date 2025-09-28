@@ -199,7 +199,7 @@ export class SbtMintImpl implements SbtMint {
 	private async saveTxState(txHash: TransactionHash) {
 		try {
 			const submissionTime = this.clock.getCurrentTime();
-			await this.transactionRepo.save({
+			await this.transactionRepo.create({
 				hash: txHash,
 				status: "pending",
 				submissionTime,

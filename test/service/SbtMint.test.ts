@@ -22,9 +22,11 @@ class ChainsApiMock extends MultiBaas.ChainsApi {
 }
 
 class TransactionRepoMock implements TransactionRepo {
-	save = jest.fn();
+	create = jest.fn();
+	update = jest.fn();
 	get = jest.fn();
 	getAllPending = jest.fn();
+	setup = jest.fn();
 }
 
 class WalletMock extends ethers.Wallet {
@@ -96,7 +98,7 @@ function testFixture(name: string, fn: (ctx: TestContext) => Promise<void>) {
 		});
 
 		const transactionRepo = new TransactionRepoMock();
-		transactionRepo.save.mockResolvedValue(undefined);
+		transactionRepo.create.mockResolvedValue(undefined);
 
 		const clock = new ClockMock();
 		clock.getCurrentTime.mockResolvedValue(
@@ -183,7 +185,7 @@ describe("SbtMint.startMinting", () => {
 	testFixture(
 		"throws an error if transaction state saving fails",
 		async (ctx) => {
-			ctx.transactionRepo.save.mockRejectedValue(
+			ctx.transactionRepo.create.mockRejectedValue(
 				new Error("Saving failed"),
 			);
 			await expect(
@@ -203,7 +205,7 @@ describe("SbtMint.startMinting", () => {
 			const mintedTxHash = await ctx.sbtMint.startMinting(validAddress);
 
 			expect(mintedTxHash).toEqual(txHash);
-			expect(ctx.transactionRepo.save).toHaveBeenCalledWith({
+			expect(ctx.transactionRepo.create).toHaveBeenCalledWith({
 				hash: txHash,
 				status: "pending",
 				submissionTime,

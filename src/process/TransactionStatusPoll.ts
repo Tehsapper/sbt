@@ -19,26 +19,26 @@ export class TransactionStatusPoll {
 	}
 
 	async start() {
-        // to avoid stampede when several service instances start at the same time
+		// to avoid stampede when several service instances start at the same time
 		const startJitterMs = Math.floor(
 			Math.random() * this.pollingIntervalMs,
 		);
 		this.logger.info(
 			`Starting transaction status poll with ${this.pollingIntervalMs}ms interval in ${startJitterMs}ms`,
 		);
-        await this.sleep(startJitterMs);
-        await this.poll();
-        this.intervalHandle = setInterval(
-            async () => await this.poll(),
-            this.pollingIntervalMs,
-        );
+		await this.sleep(startJitterMs);
+		await this.poll();
+		this.intervalHandle = setInterval(
+			async () => await this.poll(),
+			this.pollingIntervalMs,
+		);
 	}
 
-    private sleep(ms: number) {
-        return new Promise(resolve => {
-            setTimeout(resolve, ms);
-        });
-    }
+	private sleep(ms: number) {
+		return new Promise((resolve) => {
+			setTimeout(resolve, ms);
+		});
+	}
 
 	private async poll() {
 		if (this.isPolling) {
@@ -58,7 +58,7 @@ export class TransactionStatusPoll {
 		}
 	}
 
-	async stop() {
+	stop() {
 		if (this.intervalHandle) {
 			clearInterval(this.intervalHandle);
 			this.intervalHandle = null;

@@ -55,11 +55,15 @@ export class TransactionCheckerImpl implements TransactionChecker {
 	async updatePendingTransactions(): Promise<void> {
 		const pendingTxs = await this.getAllPendingTransactions();
 
-		this.logger.info(`Got ${pendingTxs.length} transactions to check`);
+		this.logger.info(
+			`Got ${pendingTxs.length} pending transactions to check`,
+		);
 
 		// TODO: retrieve transactions in bulk (watch blocks instead?)
 		for (const tx of pendingTxs) {
-			this.logger.info("Checking transaction", { txHash: tx.hash });
+			this.logger.info("Checking pending transaction", {
+				txHash: tx.hash,
+			});
 			const result = await this.getTransaction(tx.hash);
 
 			// if the transaction is not found, we assume it was discarded
@@ -74,10 +78,6 @@ export class TransactionCheckerImpl implements TransactionChecker {
 			if (tx.status !== newStatus) {
 				// TODO: update changed transactions in bulk
 				await this.updateTransactionStatus(tx, newStatus);
-				this.logger.info("Updated transaction status", {
-					txHash: tx.hash,
-					status: newStatus,
-				});
 			}
 		}
 	}
@@ -98,11 +98,14 @@ export class TransactionCheckerImpl implements TransactionChecker {
 		txHash: TransactionHash,
 	): Promise<MultiBaas.TransactionData | null> {
 		try {
+			this.logger.info("Getting transaction data", { txHash });
 			const response = await this.chainsApi.getTransaction(
 				MultiBaas.ChainName.Ethereum,
 				txHash,
 			);
-			return response.data.result;
+			const result = response.data.result;
+			this.logger.info("Got transaction data", { txHash, result });
+			return result;
 		} catch (error) {
 			if (isAxiosError(error)) {
 				// MultiBaas returns 404 status code and a JSON body with "status" field set to 404
@@ -127,7 +130,16 @@ export class TransactionCheckerImpl implements TransactionChecker {
 		newStatus: TransactionStatus,
 	): Promise<void> {
 		try {
-			await this.transactionRepo.save({ ...tx, status: newStatus });
+			this.logger.info("Updating transaction status", {
+				txHash: tx.hash,
+				oldStatus: tx.status,
+				newStatus: newStatus,
+			});
+			await this.transactionRepo.update({ ...tx, status: newStatus });
+			this.logger.info("Updated transaction status", {
+				txHash: tx.hash,
+				status: newStatus,
+			});
 		} catch (error) {
 			throw new TransactionCheckerRepoUpdateError(
 				"Error updating transaction status",

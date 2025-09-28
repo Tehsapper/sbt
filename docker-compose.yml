@@ -1,0 +1,19 @@
+services:
+  sbt:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.docker-compose
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: "postgres:15-alpine"
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    healthcheck:
+      test: pg_isready -U postgres -d postgres
+      interval: 1m
+      start_period: 10s
+      start_interval: 1s
