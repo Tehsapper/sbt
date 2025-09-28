@@ -104,7 +104,7 @@ export class SbtCheckerImpl implements SbtChecker {
 		//       or query individual transaction receipts for their events.
 		//       Unfortunately MultiBaas API documentation is lacking. It does not support pagination either.
 		//       The Events Query API seems to be broken (returns empty objects).
-		//       
+		//
 		const events = await this.checkRecentEvents({
 			contractLabel: "sbt",
 			limit: 50, // experimentally deduced, everything above is an "invalid request"
@@ -296,22 +296,26 @@ function sbtEventFrom(e: MultiBaas.Event): SbtEvent[] {
 			tokenId: parseInt(rawInputs.tokenId as string),
 			burnAuth: rawInputs.burnAuth as number,
 		};
-		return [{
-			...baseEvent,
-			name: "Issued",
-			inputs,
-		}];
+		return [
+			{
+				...baseEvent,
+				name: "Issued",
+				inputs,
+			},
+		];
 	} else if (e.event.name === "Transfer") {
 		const inputs: SbtTransferEvent["inputs"] = {
 			from: rawInputs.from,
 			to: rawInputs.to,
 			tokenId: parseInt(rawInputs.tokenId as string),
 		};
-		return [{
-			...baseEvent,
-			name: "Transfer",
-			inputs,
-		}];
+		return [
+			{
+				...baseEvent,
+				name: "Transfer",
+				inputs,
+			},
+		];
 	}
 	// some other event, ignore it
 	return [];

@@ -12,6 +12,7 @@ import {
 	UnauthorizedError,
 } from "./ApiError.js";
 import { getQueryParam } from "./validation.js";
+import { maybeTokenData } from "../domain/MintedSbt.js";
 
 export class ClaimController {
 	private sbtMint: SbtMint;
@@ -29,7 +30,9 @@ export class ClaimController {
 		}
 		try {
 			const state = await this.sbtMint.getSbt(txHash);
-			res.status(200).json(state);
+			const tokenData = maybeTokenData(state.tokenUri);
+			const result = Object.assign({}, state, tokenData);
+			res.status(200).json(result);
 		} catch (error) {
 			if (error instanceof SbtMintStateQueryError) {
 				throw new NotFoundError(

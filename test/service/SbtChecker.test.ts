@@ -124,7 +124,7 @@ function makeIssuedEvent(
 
 function makeIssuedEventForToken(
 	txHash: string,
-	tokenId: number
+	tokenId: number,
 ): Record<string, any> {
 	return {
 		triggeredAt: "2025-01-01T00:00:00Z",
@@ -152,7 +152,7 @@ function makeIssuedEventForToken(
 					value: `${tokenId}`,
 				},
 			],
-		}
+		},
 	};
 }
 
@@ -189,35 +189,32 @@ describe("SbtChecker.updatePending", () => {
 		},
 	);
 
-	testFixture(
-		"throws an error if SBT state update fails",
-		async (ctx) => {
-			const sbtTxHash = validTxHash1;
-			const sbtTokenId = 1;
-			const pendingSbt = makePendingSbt({ txHash: sbtTxHash });
-			ctx.sbtRepoMock.getAllPending.mockResolvedValue([pendingSbt]);
-			ctx.eventsApiMock.listEvents.mockResolvedValue({
-				data: {
-					result: [makeIssuedEventForToken(sbtTxHash, sbtTokenId)],
+	testFixture("throws an error if SBT state update fails", async (ctx) => {
+		const sbtTxHash = validTxHash1;
+		const sbtTokenId = 1;
+		const pendingSbt = makePendingSbt({ txHash: sbtTxHash });
+		ctx.sbtRepoMock.getAllPending.mockResolvedValue([pendingSbt]);
+		ctx.eventsApiMock.listEvents.mockResolvedValue({
+			data: {
+				result: [makeIssuedEventForToken(sbtTxHash, sbtTokenId)],
+			},
+		});
+		ctx.contractsApiMock.callContractFunction.mockResolvedValue({
+			data: {
+				result: {
+					kind: "MethodCallResponse",
+					output: `https://example.com/token/${sbtTokenId}`,
 				},
-			});
-			ctx.contractsApiMock.callContractFunction.mockResolvedValue({
-				data: {
-					result: {
-						kind: "MethodCallResponse",
-						output: `https://example.com/token/${sbtTokenId}`,
-					},
-				},
-			});
-			ctx.sbtRepoMock.update.mockRejectedValue(
-				new Error("Repo update failed"),
-			);
+			},
+		});
+		ctx.sbtRepoMock.update.mockRejectedValue(
+			new Error("Repo update failed"),
+		);
 
-			await expect(ctx.sbtChecker.updatePending()).rejects.toThrow(
-				SbtCheckerRepoUpdateError,
-			);
-		},
-	);
+		await expect(ctx.sbtChecker.updatePending()).rejects.toThrow(
+			SbtCheckerRepoUpdateError,
+		);
+	});
 
 	testFixture(
 		"does not update SBT state if no issued event before grace period",
