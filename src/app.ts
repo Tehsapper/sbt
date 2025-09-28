@@ -8,6 +8,7 @@ import { ClaimController } from "./controller/ClaimController.js";
 import { TransactionCheckerImpl } from "./service/TransactionChecker.js";
 import { InMemoryTransactionRepo } from "./repo/InMemoryTransactionRepo.js";
 import { Logger } from "tslog";
+import { SystemClock } from "./service/Clock.js";
 
 dotenv.config({ path: ".env" });
 
@@ -29,11 +30,13 @@ const multiBaasChainsApi = new MultiBaas.ChainsApi(multiBaasConfig);
 const wallet = new ethers.Wallet(config.wallet.privateKey);
 
 const transactionRepo = new InMemoryTransactionRepo();
+const clock = new SystemClock();
 
 const sbtMint = new SbtMintImpl(
 	multiBaasContractsApi,
 	multiBaasChainsApi,
 	transactionRepo,
+	clock,
 	wallet,
 );
 const transactionChecker = new TransactionCheckerImpl(

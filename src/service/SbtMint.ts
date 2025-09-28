@@ -4,6 +4,7 @@ import { ethers } from "ethers";
 import { EthereumAddress, TransactionHash } from "../core.js";
 import { ILogObj, Logger } from "tslog";
 import { TransactionRepo } from "../repo/TransactionRepo.js";
+import { Clock } from "./Clock.js";
 
 type SignedTransaction = string;
 
@@ -38,6 +39,12 @@ export class SbtMintSubmissionFailure extends SbtMintFailure {
 	}
 }
 
+export class SbtMintStateSavingFailure extends SbtMintFailure {
+	constructor(message: string, cause?: unknown) {
+		super(message, cause);
+	}
+}
+
 export interface SbtMint {
 	startMinting(to: EthereumAddress): Promise<TransactionHash>;
 }
@@ -46,6 +53,7 @@ export class SbtMintImpl implements SbtMint {
 	private contractsApi: MultiBaas.ContractsApi;
 	private chainsApi: MultiBaas.ChainsApi;
 	private transactionRepo: TransactionRepo;
+	private clock: Clock;
 	private wallet: ethers.Wallet;
 	private chain: MultiBaas.ChainName;
 	private logger: Logger<ILogObj>;
@@ -54,6 +62,7 @@ export class SbtMintImpl implements SbtMint {
 		contractsApi: MultiBaas.ContractsApi,
 		chainsApi: MultiBaas.ChainsApi,
 		transactionRepo: TransactionRepo,
+		clock: Clock,
 		wallet: ethers.Wallet,
 		chain: MultiBaas.ChainName = MultiBaas.ChainName.Ethereum,
 		logger: Logger<ILogObj> = new Logger({
@@ -63,6 +72,7 @@ export class SbtMintImpl implements SbtMint {
 		this.contractsApi = contractsApi;
 		this.chainsApi = chainsApi;
 		this.transactionRepo = transactionRepo;
+		this.clock = clock;
 		this.wallet = wallet;
 		this.chain = chain;
 		this.logger = logger;
@@ -78,13 +88,7 @@ export class SbtMintImpl implements SbtMint {
 		const tx = await this.makeSbtMintTx(this.wallet.address, to);
 		const signedTx = await this.signTx(tx);
 		const txHash = await this.sendSignedTx(signedTx);
-		this.logger.info("Minting SBT transaction submitted", { txHash });
-		await this.transactionRepo.save({
-			hash: txHash,
-			status: "pending",
-			submissionTime: new Date(),
-		});
-		this.logger.info("Minting SBT transaction state saved", { txHash });
+		await this.saveTxState(txHash);
 		return txHash;
 	}
 
@@ -187,6 +191,26 @@ export class SbtMintImpl implements SbtMint {
 		} catch (e) {
 			throw new SbtMintSubmissionFailure(
 				"Failed to submit signed transaction",
+				e,
+			);
+		}
+	}
+
+	private async saveTxState(txHash: TransactionHash) {
+		try {
+			const submissionTime = this.clock.getCurrentTime();
+			await this.transactionRepo.save({
+				hash: txHash,
+				status: "pending",
+				submissionTime,
+			});
+			this.logger.info("Pending SBT transaction state saved", {
+				txHash,
+				submissionTime,
+			});
+		} catch (e) {
+			throw new SbtMintStateSavingFailure(
+				"Failed to save transaction state",
 				e,
 			);
 		}
