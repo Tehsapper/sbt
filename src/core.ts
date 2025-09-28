@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 
+// TODO: consider making this an opaque type
 export type EthereumAddress = string;
 export type TransactionHash = string;
 

@@ -22,19 +22,19 @@ export class SbtMintContractCallFailure extends SbtMintFailure {
 }
 
 export class SbtMintChainQueryFailure extends SbtMintFailure {
-	constructor(message: string, cause?: unknown) {
+	constructor(message: string, cause: unknown) {
 		super(message, cause);
 	}
 }
 
 export class SbtMintSigningFailure extends SbtMintFailure {
-	constructor(message: string, cause?: unknown) {
+	constructor(message: string, cause: unknown) {
 		super(message, cause);
 	}
 }
 
 export class SbtMintSubmissionFailure extends SbtMintFailure {
-	constructor(message: string, cause?: unknown) {
+	constructor(message: string, cause: unknown) {
 		super(message, cause);
 	}
 }
@@ -140,9 +140,9 @@ export class SbtMintImpl implements SbtMint {
 
 	private async getChainId(): Promise<number> {
 		try {
-			// TODO: can this be cached?
-			const resp = await this.chainsApi.getChainStatus(this.chain);
-			return resp.data.result.chainID;
+			// TODO: check if this can be cached
+			const response = await this.chainsApi.getChainStatus(this.chain);
+			return response.data.result.chainID;
 		} catch (e) {
 			throw new SbtMintChainQueryFailure("Failed to get chain status", e);
 		}

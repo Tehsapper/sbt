@@ -1,11 +1,40 @@
 import * as MultiBaas from "@curvegrid/multibaas-sdk";
 import { TransactionRepo } from "../repo/TransactionRepo.js";
 import { Logger, ILogObj } from "tslog";
-import { TransactionHash } from "../core.js";
+import {
+	TransactionHash,
+	TransactionState,
+	TransactionStatus,
+} from "../core.js";
 import { isAxiosError } from "axios";
 
 export interface TransactionChecker {
 	updatePendingTransactions(): Promise<void>;
+}
+
+export class TransactionCheckerError extends Error {
+	constructor(message: string, cause: unknown) {
+		super(message);
+		this.cause = cause;
+	}
+}
+
+export class TransactionCheckerRepoRetrievalError extends TransactionCheckerError {
+	constructor(message: string, cause: unknown) {
+		super(message, cause);
+	}
+}
+
+export class TransactionCheckerApiRetrievalError extends TransactionCheckerError {
+	constructor(message: string, cause: unknown) {
+		super(message, cause);
+	}
+}
+
+export class TransactionCheckerRepoUpdateError extends TransactionCheckerError {
+	constructor(message: string, cause: unknown) {
+		super(message, cause);
+	}
 }
 
 export class TransactionCheckerImpl implements TransactionChecker {
@@ -24,14 +53,18 @@ export class TransactionCheckerImpl implements TransactionChecker {
 	}
 
 	async updatePendingTransactions(): Promise<void> {
-		const pendingTxs = await this.transactionRepo.getAllPending();
+		const pendingTxs = await this.getAllPendingTransactions();
 
 		this.logger.info(`Got ${pendingTxs.length} transactions to check`);
 
+		// TODO: retrieve transactions in bulk (watch blocks instead?)
 		for (const tx of pendingTxs) {
 			this.logger.info("Checking transaction", { txHash: tx.hash });
 			const result = await this.getTransaction(tx.hash);
 
+			// if the transaction is not found, we assume it was discarded
+			// TODO: add grace period to avoid false positives
+			// TODO: consider that transaction might come back
 			const newStatus = result
 				? result.isPending
 					? "pending"
@@ -39,12 +72,25 @@ export class TransactionCheckerImpl implements TransactionChecker {
 				: "failed";
 
 			if (tx.status !== newStatus) {
-				await this.transactionRepo.save({ ...tx, status: newStatus });
+				// TODO: update changed transactions in bulk
+				await this.updateTransactionStatus(tx, newStatus);
 				this.logger.info("Updated transaction status", {
 					txHash: tx.hash,
 					status: newStatus,
 				});
 			}
+		}
+	}
+
+	private async getAllPendingTransactions(): Promise<TransactionState[]> {
+		try {
+			const pendingTxs = await this.transactionRepo.getAllPending();
+			return pendingTxs;
+		} catch (error) {
+			throw new TransactionCheckerRepoRetrievalError(
+				"Error getting all pending transactions",
+				error,
+			);
 		}
 	}
 
@@ -69,7 +115,24 @@ export class TransactionCheckerImpl implements TransactionChecker {
 					return null;
 				}
 			}
-			throw error;
+			throw new TransactionCheckerApiRetrievalError(
+				`Error getting transaction ${error}`,
+				error,
+			);
+		}
+	}
+
+	private async updateTransactionStatus(
+		tx: TransactionState,
+		newStatus: TransactionStatus,
+	): Promise<void> {
+		try {
+			await this.transactionRepo.save({ ...tx, status: newStatus });
+		} catch (error) {
+			throw new TransactionCheckerRepoUpdateError(
+				"Error updating transaction status",
+				error,
+			);
 		}
 	}
 }

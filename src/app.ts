@@ -63,6 +63,9 @@ const app = express();
 app.use(express.json());
 
 app.post("/claim", (req, res) => claimController.handleClaim(req, res));
+app.all("*", (req, res) => {
+	res.status(404).json({ error: "Not found" });
+});
 
 app.listen(config.server.port, config.server.hostname, () => {
 	logger.info(
