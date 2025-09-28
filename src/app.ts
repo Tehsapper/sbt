@@ -9,6 +9,7 @@ import { TransactionCheckerImpl } from "./service/TransactionChecker.js";
 import { InMemoryTransactionRepo } from "./repo/InMemoryTransactionRepo.js";
 import { Logger } from "tslog";
 import { SystemClock } from "./service/Clock.js";
+import { TransactionStatusPoll } from "./process/TransactionStatusPoll.js";
 
 dotenv.config({ path: ".env" });
 
@@ -45,16 +46,11 @@ const transactionChecker = new TransactionCheckerImpl(
 );
 
 // TODO: consider using other means to track transaction status:
-// - use MultiBaaS webhooks
+// - use MultiBaaS webhooks to avoid polling
 // - some kind of (cron?) job or scheduler library
 // - k8s cronjob or AWS Lambda function
-setInterval(async () => {
-	try {
-		await transactionChecker.updatePendingTransactions();
-	} catch (error) {
-		logger.error("Error updating pending transactions", error);
-	}
-}, config.txStatusPollingIntervalSeconds * 1000);
+const transactionStatusPoll = new TransactionStatusPoll(transactionChecker, config.txStatusPollingIntervalSeconds);
+transactionStatusPoll.start();
 
 const claimController = new ClaimController(sbtMint);
 
@@ -63,7 +59,7 @@ const app = express();
 app.use(express.json());
 
 app.post("/claim", (req, res) => claimController.handleClaim(req, res));
-app.all("*", (req, res) => {
+app.all("*everything", (req, res) => {
 	res.status(404).json({ error: "Not found" });
 });
 
