@@ -1,19 +1,19 @@
-import { TransactionChecker } from "../service/TransactionChecker.js";
+import { SbtChecker } from "../service/SbtChecker.js";
 import { Logger, ILogObj } from "tslog";
 
-export class TransactionStatusPoll {
-	private transactionChecker: TransactionChecker;
+export class SbtStatusPoll {
+	private sbtChecker: SbtChecker;
 	private pollingIntervalMs: number;
 	private logger: Logger<ILogObj>;
 	private intervalHandle: NodeJS.Timeout | null = null;
 	private isPolling: boolean = false;
 
 	constructor(
-		transactionChecker: TransactionChecker,
+		sbtChecker: SbtChecker,
 		pollingIntervalSeconds: number,
 		logger: Logger<ILogObj>,
 	) {
-		this.transactionChecker = transactionChecker;
+		this.sbtChecker = sbtChecker;
 		this.pollingIntervalMs = pollingIntervalSeconds * 1000;
 		this.logger = logger;
 	}
@@ -50,7 +50,7 @@ export class TransactionStatusPoll {
 
 		try {
 			this.isPolling = true;
-			await this.transactionChecker.updatePendingTxs();
+			await this.sbtChecker.updatePending();
 		} catch (error) {
 			this.logger.error("Error updating pending transactions", { error });
 		} finally {

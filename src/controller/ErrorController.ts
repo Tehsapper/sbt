@@ -1,6 +1,7 @@
 import { Logger, ILogObj } from "tslog";
 import { ApiError, Severity } from "./ApiError.js";
 import { Request, Response } from "express";
+import { isAxiosError } from "axios";
 
 export class ErrorController {
 	private logger: Logger<ILogObj>;
@@ -26,7 +27,10 @@ export class ErrorController {
 			const [tsLogLevel, tsLogLevelName] = tsLogLevelAndNameFrom(
 				err.severity,
 			);
-			const extra = Object.assign({}, err.cause && { cause: err.cause });
+			const extra = Object.assign(
+				{},
+				err.cause && { cause: slimCause(err.cause) },
+			);
 
 			this.logger.log(tsLogLevel, tsLogLevelName, err.message, extra);
 			res.status(err.httpStatusCode).json({ error: err.message });
@@ -48,4 +52,22 @@ function tsLogLevelAndNameFrom(severity: Severity): [number, string] {
 		case Severity.ERROR:
 			return [5, "ERROR"];
 	}
+}
+
+function slimCause(cause: unknown, depth: number = 0): any {
+	if (!cause) return cause;
+	if (depth > 1) return undefined;
+	if (isAxiosError(cause)) {
+		return {
+			status: cause.response?.status,
+			body: cause.response?.data,
+		};
+	}
+	if (typeof cause === "object") {
+		const errorObj: any = cause as any;
+		if (errorObj.cause)
+			errorObj.cause = slimCause(errorObj.cause, depth + 1);
+		return errorObj;
+	}
+	return cause;
 }

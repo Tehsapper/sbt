@@ -28,7 +28,7 @@ export class ClaimController {
 			);
 		}
 		try {
-			const state = await this.sbtMint.getSbtState(txHash);
+			const state = await this.sbtMint.getSbt(txHash);
 			res.status(200).json(state);
 		} catch (error) {
 			if (error instanceof SbtMintStateQueryError) {

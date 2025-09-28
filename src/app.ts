@@ -5,11 +5,11 @@ import { SbtMintImpl } from "./service/SbtMint.js";
 import { configFromProcessEnv } from "./config.js";
 import { ethers } from "ethers";
 import { ClaimController } from "./controller/ClaimController.js";
-import { TransactionCheckerImpl } from "./service/TransactionChecker.js";
-import { PostgresTransactionRepo } from "./repo/PostgresTransactionRepo.js";
+import { SbtCheckerImpl } from "./service/SbtChecker.js";
+import { PostgresSbtRepo } from "./repo/PostgresSbtRepo.js";
 import { ILogObj, Logger } from "tslog";
 import { SystemClock } from "./service/Clock.js";
-import { TransactionStatusPoll } from "./process/TransactionStatusPoll.js";
+import { SbtStatusPoll as SbtStatusPollProcess } from "./process/SbtStatusPoll.js";
 import prexit from "prexit";
 import { makePostgresClient } from "./repo/PostgresClient.js";
 import { ErrorController } from "./controller/ErrorController.js";
@@ -34,41 +34,43 @@ const multiBaasConfig = new MultiBaas.Configuration({
 
 const multiBaasContractsApi = new MultiBaas.ContractsApi(multiBaasConfig);
 const multiBaasChainsApi = new MultiBaas.ChainsApi(multiBaasConfig);
+const multiBaasEventsApi = new MultiBaas.EventsApi(multiBaasConfig);
 
 // TODO: consider using MultiBaaS Cloud Wallet with a secure provider.
 const wallet = new ethers.Wallet(config.wallet.privateKey);
 
 const db = makePostgresClient(config.postgres, makeLogger("postgres"));
 
-const transactionRepo = new PostgresTransactionRepo(db);
-await transactionRepo.setup();
+const sbtRepo = new PostgresSbtRepo(db);
+await sbtRepo.setup();
 
 const clock = new SystemClock();
 
 const sbtMint = new SbtMintImpl(
 	multiBaasContractsApi,
 	multiBaasChainsApi,
-	transactionRepo,
+	sbtRepo,
 	clock,
 	wallet,
 	makeLogger("SbtMint"),
 );
-const transactionChecker = new TransactionCheckerImpl(
-	transactionRepo,
-	multiBaasChainsApi,
+const sbtChecker = new SbtCheckerImpl(
+	sbtRepo,
+	multiBaasEventsApi,
+	multiBaasContractsApi,
 	clock,
 	config.discardedTxGracePeriodSeconds,
-	makeLogger("TransactionChecker"),
+	makeLogger("SbtChecker"),
 );
 
-// TODO: consider using other means to track transaction status:
+// TODO: consider using other means to track SBT status:
 // - use MultiBaaS webhooks to avoid polling
 // - some kind of (cron?) job or scheduler library
 // - k8s cronjob or AWS Lambda function
-const transactionStatusPoll = new TransactionStatusPoll(
-	transactionChecker,
+const sbtStatusPollProcess = new SbtStatusPollProcess(
+	sbtChecker,
 	config.txStatusPollingIntervalSeconds,
-	makeLogger("TransactionStatusPoll"),
+	makeLogger("SbtStatusPoll"),
 );
 
 const claimController = new ClaimController(sbtMint);
@@ -80,7 +82,6 @@ app.use(express.json());
 
 const router = makeRouter(claimController, errorController);
 app.use(router);
-
 app.use((err: any, req: any, res: any, next: any) =>
 	errorController.handleError(err, req, res, next),
 );
@@ -91,11 +92,11 @@ const server = app.listen(config.server.port, config.server.hostname, () => {
 	);
 });
 
-transactionStatusPoll.start();
+sbtStatusPollProcess.start();
 
 prexit(async () => {
 	logger.info("Shutting down...");
-	transactionStatusPoll.stop();
+	sbtStatusPollProcess.stop();
 
 	// express does not allow to specify timeout, so we race here.
 	await Promise.race([

@@ -9,7 +9,7 @@ import { Request, Response } from "express";
 
 class SbtMintMock implements SbtMint {
 	startMinting = jest.fn();
-	getSbtState = jest.fn();
+	getSbt = jest.fn();
 }
 
 function requestWithQueryParams(

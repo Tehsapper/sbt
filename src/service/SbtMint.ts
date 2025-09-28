@@ -2,14 +2,15 @@ import * as MultiBaas from "@curvegrid/multibaas-sdk";
 import { isAxiosError } from "axios";
 import { ethers } from "ethers";
 import { ILogObj, Logger } from "tslog";
-import { TransactionRepo } from "../repo/TransactionRepo.js";
 import { Clock } from "./Clock.js";
 import {
 	EthereumTransaction,
 	EthereumTransactionHash,
 } from "../domain/EthereumTransaction.js";
 import { EthereumAddress } from "../domain/EthereumAddress.js";
-import { ethereumAddressFrom, numberFromHexString } from "../core.js";
+import { numberFromHexString } from "../core.js";
+import { MintedSbt } from "../domain/MintedSbt.js";
+import { SbtRepo } from "../repo/SbtRepo.js";
 
 type SignedTransaction = string;
 
@@ -58,13 +59,13 @@ export class SbtMintStateQueryError extends SbtMintError {
 
 export interface SbtMint {
 	startMinting(to: EthereumAddress): Promise<EthereumTransactionHash>;
-	getSbtState(txHash: EthereumTransactionHash): Promise<EthereumTransaction>;
+	getSbt(txHash: EthereumTransactionHash): Promise<MintedSbt>;
 }
 
 export class SbtMintImpl implements SbtMint {
 	private contractsApi: MultiBaas.ContractsApi;
 	private chainsApi: MultiBaas.ChainsApi;
-	private transactionRepo: TransactionRepo;
+	private sbtRepo: SbtRepo;
 	private clock: Clock;
 	private wallet: ethers.Wallet;
 	private chain: MultiBaas.ChainName;
@@ -73,7 +74,7 @@ export class SbtMintImpl implements SbtMint {
 	constructor(
 		contractsApi: MultiBaas.ContractsApi,
 		chainsApi: MultiBaas.ChainsApi,
-		transactionRepo: TransactionRepo,
+		sbtRepo: SbtRepo,
 		clock: Clock,
 		wallet: ethers.Wallet,
 		logger: Logger<ILogObj>,
@@ -81,7 +82,7 @@ export class SbtMintImpl implements SbtMint {
 	) {
 		this.contractsApi = contractsApi;
 		this.chainsApi = chainsApi;
-		this.transactionRepo = transactionRepo;
+		this.sbtRepo = sbtRepo;
 		this.clock = clock;
 		this.wallet = wallet;
 		this.chain = chain;
@@ -98,14 +99,22 @@ export class SbtMintImpl implements SbtMint {
 		const txToSign = await this.makeSbtMintTx(this.wallet.address, to);
 		const signedTx = await this.signTx(txToSign);
 		const submittedTx = await this.sendSignedTx(signedTx);
-		await this.saveTxState(submittedTx);
+		await this.saveSbtState({
+			txHash: submittedTx.hash,
+			from: this.wallet.address,
+			to,
+			tokenId: null,
+			tokenUri: null,
+			createdAt: submittedTx.submittedAt,
+			issuedAt: null,
+			updatedAt: submittedTx.updatedAt,
+			status: "pending",
+		});
 		return submittedTx.hash;
 	}
 
-	async getSbtState(
-		txHash: EthereumTransactionHash,
-	): Promise<EthereumTransaction> {
-		const tx = await this.transactionRepo.get(txHash);
+	async getSbt(txHash: EthereumTransactionHash): Promise<MintedSbt> {
+		const tx = await this.sbtRepo.get(txHash);
 		if (!tx) {
 			throw new SbtMintStateQueryError(
 				`SBT transaction ${txHash} not found`,
@@ -233,17 +242,14 @@ export class SbtMintImpl implements SbtMint {
 		}
 	}
 
-	private async saveTxState(tx: EthereumTransaction) {
+	private async saveSbtState(sbt: MintedSbt) {
 		try {
-			await this.transactionRepo.create(tx);
-			this.logger.info("Pending SBT transaction state saved", {
-				tx,
+			await this.sbtRepo.create(sbt);
+			this.logger.info("Pending SBT state saved", {
+				sbt,
 			});
 		} catch (e) {
-			throw new SbtMintStateSavingError(
-				"Failed to save transaction state",
-				e,
-			);
+			throw new SbtMintStateSavingError("Failed to save SBT state", e);
 		}
 	}
 }

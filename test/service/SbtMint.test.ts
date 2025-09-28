@@ -10,7 +10,7 @@ import {
 import * as MultiBaas from "@curvegrid/multibaas-sdk";
 import * as ethers from "ethers";
 import { Clock } from "../../src/service/Clock.js";
-import { TransactionRepo } from "../../src/repo/TransactionRepo.js";
+import { SbtRepo } from "../../src/repo/SbtRepo.js";
 
 class ContractsApiMock extends MultiBaas.ContractsApi {
 	callContractFunction = jest.fn();
@@ -21,7 +21,7 @@ class ChainsApiMock extends MultiBaas.ChainsApi {
 	submitSignedTransaction = jest.fn();
 }
 
-class TransactionRepoMock implements TransactionRepo {
+class SbtRepoMock implements SbtRepo {
 	create = jest.fn();
 	update = jest.fn();
 	get = jest.fn();
@@ -41,6 +41,7 @@ const validAddress1 = "0x269e1D5d79760B061E3082C9605cD39E0Ece3a4A";
 const validAddress2 = "0x269e1D5d79760B061E3082C9605cD39E0Ece3a4B";
 const bogusKey =
 	"1111111111111111111111111111111111111111111111111111111111111111";
+const bogusKeyAddress = "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A";
 const validTxHash =
 	"0x3cbc6345a67a276f3ba132b8655dcebd0ca249b5c9b77fc6361f3ae89bd0a928";
 
@@ -61,7 +62,7 @@ function makeDummyTxToSign(): MultiBaas.TransactionToSignTx {
 type TestContext = {
 	contractsApiMock: ContractsApiMock;
 	chainsApiMock: ChainsApiMock;
-	transactionRepo: TransactionRepoMock;
+	sbtRepo: SbtRepoMock;
 	clock: ClockMock;
 	walletMock: WalletMock;
 	hiddenLogger: Logger<ILogObj>;
@@ -106,8 +107,8 @@ function testFixture(name: string, fn: (ctx: TestContext) => Promise<void>) {
 			},
 		});
 
-		const transactionRepo = new TransactionRepoMock();
-		transactionRepo.create.mockResolvedValue(undefined);
+		const sbtRepo = new SbtRepoMock();
+		sbtRepo.create.mockResolvedValue(undefined);
 
 		const clock = new ClockMock();
 		clock.getCurrentTime.mockResolvedValue(
@@ -122,7 +123,7 @@ function testFixture(name: string, fn: (ctx: TestContext) => Promise<void>) {
 		const sbtMint = new SbtMintImpl(
 			contractsApiMock,
 			chainsApiMock,
-			transactionRepo,
+			sbtRepo,
 			clock,
 			walletMock,
 			hiddenLogger,
@@ -131,7 +132,7 @@ function testFixture(name: string, fn: (ctx: TestContext) => Promise<void>) {
 		await fn({
 			contractsApiMock,
 			chainsApiMock,
-			transactionRepo,
+			sbtRepo,
 			clock,
 			walletMock,
 			hiddenLogger,
@@ -191,20 +192,15 @@ describe("SbtMint.startMinting", () => {
 		},
 	);
 
-	testFixture(
-		"throws an error if transaction state saving fails",
-		async (ctx) => {
-			ctx.transactionRepo.create.mockRejectedValue(
-				new Error("Saving failed"),
-			);
-			await expect(
-				ctx.sbtMint.startMinting(validAddress1),
-			).rejects.toThrow(SbtMintStateSavingError);
-		},
-	);
+	testFixture("throws an error if SBT state saving fails", async (ctx) => {
+		ctx.sbtRepo.create.mockRejectedValue(new Error("Saving failed"));
+		await expect(ctx.sbtMint.startMinting(validAddress1)).rejects.toThrow(
+			SbtMintStateSavingError,
+		);
+	});
 
 	testFixture(
-		"saves successfully submitted pending transaction state to the repo",
+		"saves successfully submitted pending SBT state to the repo",
 		async (ctx) => {
 			const txHash = validTxHash;
 			const submissionTime = new Date("2025-01-01T00:00:00Z");
@@ -230,17 +226,16 @@ describe("SbtMint.startMinting", () => {
 			const mintedTxHash = await ctx.sbtMint.startMinting(validAddress1);
 
 			expect(mintedTxHash).toEqual(txHash);
-			expect(ctx.transactionRepo.create).toHaveBeenCalledWith({
-				hash: txHash,
+			expect(ctx.sbtRepo.create).toHaveBeenCalledWith({
+				txHash,
 				status: "pending",
-				submittedAt: submissionTime,
-				updatedAt: submissionTime,
-				from: null,
+				from: bogusKeyAddress,
 				to: validAddress1,
-				value: 0,
-				nonce: 0,
-				gasLimit: 0,
-				blockNumber: null,
+				tokenId: null,
+				tokenUri: null,
+				createdAt: submissionTime,
+				issuedAt: null,
+				updatedAt: submissionTime,
 			});
 		},
 	);
