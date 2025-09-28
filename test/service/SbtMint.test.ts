@@ -37,7 +37,8 @@ class ClockMock implements Clock {
 	getCurrentTime = jest.fn();
 }
 
-const validAddress = "0x269e1D5d79760B061E3082C9605cD39E0Ece3a4A";
+const validAddress1 = "0x269e1D5d79760B061E3082C9605cD39E0Ece3a4A";
+const validAddress2 = "0x269e1D5d79760B061E3082C9605cD39E0Ece3a4B";
 const bogusKey =
 	"1111111111111111111111111111111111111111111111111111111111111111";
 const validTxHash =
@@ -45,8 +46,8 @@ const validTxHash =
 
 function makeDummyTxToSign(): MultiBaas.TransactionToSignTx {
 	return {
-		to: validAddress,
-		from: validAddress,
+		to: validAddress1,
+		from: validAddress2,
 		nonce: 0,
 		data: "0x",
 		value: "0x0",
@@ -92,6 +93,14 @@ function testFixture(name: string, fn: (ctx: TestContext) => Promise<void>) {
 				result: {
 					tx: {
 						hash: validTxHash,
+						from: validAddress1,
+						to: validAddress2,
+						value: "0x0",
+						nonce: 0,
+						gas: 0,
+						gasFeeCap: "0x0",
+						gasTipCap: "0x0",
+						type: 0,
 					},
 				},
 			},
@@ -136,7 +145,7 @@ describe("SbtMint.startMinting", () => {
 		ctx.contractsApiMock.callContractFunction.mockRejectedValue(
 			new Error("Contract call failed"),
 		);
-		await expect(ctx.sbtMint.startMinting(validAddress)).rejects.toThrow(
+		await expect(ctx.sbtMint.startMinting(validAddress1)).rejects.toThrow(
 			SbtMintContractCallError,
 		);
 	});
@@ -154,7 +163,7 @@ describe("SbtMint.startMinting", () => {
 			new Error("Chain query failed"),
 		);
 
-		await expect(ctx.sbtMint.startMinting(validAddress)).rejects.toThrow(
+		await expect(ctx.sbtMint.startMinting(validAddress1)).rejects.toThrow(
 			SbtMintChainQueryError,
 		);
 	});
@@ -164,7 +173,7 @@ describe("SbtMint.startMinting", () => {
 			new Error("Signing failed"),
 		);
 
-		await expect(ctx.sbtMint.startMinting(validAddress)).rejects.toThrow(
+		await expect(ctx.sbtMint.startMinting(validAddress1)).rejects.toThrow(
 			SbtMintSigningError,
 		);
 	});
@@ -177,7 +186,7 @@ describe("SbtMint.startMinting", () => {
 			);
 
 			await expect(
-				ctx.sbtMint.startMinting(validAddress),
+				ctx.sbtMint.startMinting(validAddress1),
 			).rejects.toThrow(SbtMintSubmissionError);
 		},
 	);
@@ -189,26 +198,49 @@ describe("SbtMint.startMinting", () => {
 				new Error("Saving failed"),
 			);
 			await expect(
-				ctx.sbtMint.startMinting(validAddress),
+				ctx.sbtMint.startMinting(validAddress1),
 			).rejects.toThrow(SbtMintStateSavingError);
 		},
 	);
 
 	testFixture(
-		"saves submitted pending transaction hash to the transaction repo",
+		"saves successfully submitted pending transaction state to the repo",
 		async (ctx) => {
 			const txHash = validTxHash;
 			const submissionTime = new Date("2025-01-01T00:00:00Z");
 			ctx.walletMock.signTransaction.mockResolvedValue(txHash);
 			ctx.clock.getCurrentTime.mockReturnValue(submissionTime);
+			ctx.chainsApiMock.submitSignedTransaction.mockResolvedValue({
+				data: {
+					result: {
+						tx: {
+							hash: validTxHash,
+							to: validAddress1,
+							value: "0x0",
+							nonce: 0,
+							gas: 0,
+							gasFeeCap: "0x0",
+							gasTipCap: "0x0",
+							type: 2,
+						},
+					},
+				},
+			});
 
-			const mintedTxHash = await ctx.sbtMint.startMinting(validAddress);
+			const mintedTxHash = await ctx.sbtMint.startMinting(validAddress1);
 
 			expect(mintedTxHash).toEqual(txHash);
 			expect(ctx.transactionRepo.create).toHaveBeenCalledWith({
 				hash: txHash,
 				status: "pending",
-				submissionTime,
+				submittedAt: submissionTime,
+				updatedAt: submissionTime,
+				from: null,
+				to: validAddress1,
+				value: 0,
+				nonce: 0,
+				gasLimit: 0,
+				blockNumber: null,
 			});
 		},
 	);

@@ -50,7 +50,7 @@ export class TransactionStatusPoll {
 
 		try {
 			this.isPolling = true;
-			await this.transactionChecker.updatePendingTransactions();
+			await this.transactionChecker.updatePendingTxs();
 		} catch (error) {
 			this.logger.error("Error updating pending transactions", { error });
 		} finally {

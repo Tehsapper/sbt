@@ -42,3 +42,7 @@ export function validSignature(
 		return false;
 	}
 }
+
+export function numberFromHexString(hexString: string): number {
+	return parseInt(hexString, 16);
+}

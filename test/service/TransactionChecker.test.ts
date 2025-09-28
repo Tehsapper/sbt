@@ -8,7 +8,8 @@ import {
 	TransactionCheckerRepoRetrievalError,
 	TransactionCheckerRepoUpdateError,
 } from "../../src/service/TransactionChecker.js";
-import { TransactionState } from "../../src/core.js";
+import { Clock } from "../../src/service/Clock.js";
+import { EthereumTransaction } from "../../src/domain/EthereumTransaction.js";
 
 class TransactionRepoMock implements TransactionRepo {
 	create = jest.fn();
@@ -22,9 +23,15 @@ class ChainsApiMock extends MultiBaas.ChainsApi {
 	getTransaction = jest.fn();
 }
 
+class ClockMock implements Clock {
+	getCurrentTime = jest.fn();
+}
+
 type TestContext = {
 	transactionRepoMock: TransactionRepoMock;
 	chainsApiMock: ChainsApiMock;
+	clockMock: ClockMock;
+	discardedTxGracePeriodSeconds: number;
 	hiddenLogger: Logger<ILogObj>;
 	transactionChecker: TransactionChecker;
 };
@@ -33,28 +40,48 @@ function testFixture(name: string, fn: (ctx: TestContext) => Promise<void>) {
 	test(name, async () => {
 		const transactionRepoMock = new TransactionRepoMock();
 		const chainsApiMock = new ChainsApiMock();
+		const clockMock = new ClockMock();
+		const discardedTxGracePeriodSeconds = 10;
 		const hiddenLogger = new Logger<ILogObj>({ type: "hidden" });
 		const transactionChecker = new TransactionCheckerImpl(
 			transactionRepoMock,
 			chainsApiMock,
+			clockMock,
+			discardedTxGracePeriodSeconds,
 			hiddenLogger,
 		);
 
 		fn({
 			transactionRepoMock,
 			chainsApiMock,
+			clockMock,
+			discardedTxGracePeriodSeconds,
 			hiddenLogger,
 			transactionChecker,
 		});
 	});
 }
 
-function makePendingTx(): TransactionState {
+function makePendingTx(
+	required: Partial<EthereumTransaction> = {},
+): EthereumTransaction {
 	return {
 		hash: "0x3cbc6345a67a276f3ba132b8655dcebd0ca249b5c9b77fc6361f3ae89bd0a928",
 		status: "pending",
-		submissionTime: new Date("2025-01-01T00:00:00Z"),
+		submittedAt: new Date("2025-01-01T00:00:00Z"),
+		updatedAt: new Date("2025-01-01T00:00:00Z"),
+		from: "0x0000000000000000000000000000000000000001",
+		to: "0x0000000000000000000000000000000000000002",
+		value: 0,
+		nonce: 0,
+		gasLimit: 0,
+		blockNumber: null,
+		...required,
 	};
+}
+
+function addSeconds(date: Date, seconds: number): Date {
+	return new Date(date.getTime() + seconds * 1000);
 }
 
 describe("TransactionChecker.updatePendingTransactions", () => {
@@ -66,7 +93,7 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 			);
 
 			await expect(
-				ctx.transactionChecker.updatePendingTransactions(),
+				ctx.transactionChecker.updatePendingTxs(),
 			).rejects.toThrow(TransactionCheckerRepoRetrievalError);
 		},
 	);
@@ -81,7 +108,7 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 			);
 
 			await expect(
-				ctx.transactionChecker.updatePendingTransactions(),
+				ctx.transactionChecker.updatePendingTxs(),
 			).rejects.toThrow(TransactionCheckerApiRetrievalError);
 		},
 	);
@@ -103,7 +130,7 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 			);
 
 			await expect(
-				ctx.transactionChecker.updatePendingTransactions(),
+				ctx.transactionChecker.updatePendingTxs(),
 			).rejects.toThrow(TransactionCheckerRepoUpdateError);
 		},
 	);
@@ -121,7 +148,35 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 				},
 			});
 
-			await ctx.transactionChecker.updatePendingTransactions();
+			await ctx.transactionChecker.updatePendingTxs();
+
+			expect(ctx.transactionRepoMock.update).not.toHaveBeenCalled();
+		},
+	);
+
+	testFixture(
+		"does not update transaction status if it is missing before grace period",
+		async (ctx) => {
+			const pendingTx1 = makePendingTx({
+				submittedAt: new Date("2025-01-01T00:00:00Z"),
+			});
+			const passedSeconds = ctx.discardedTxGracePeriodSeconds - 1;
+			const currentTime = addSeconds(
+				pendingTx1.submittedAt,
+				passedSeconds,
+			);
+			ctx.clockMock.getCurrentTime.mockReturnValue(currentTime);
+			ctx.transactionRepoMock.getAllPending.mockResolvedValue([
+				pendingTx1,
+			]);
+			ctx.chainsApiMock.getTransaction.mockResolvedValue({
+				status: 404,
+				data: {
+					status: 404,
+				},
+			});
+
+			await ctx.transactionChecker.updatePendingTxs();
 
 			expect(ctx.transactionRepoMock.update).not.toHaveBeenCalled();
 		},
@@ -132,6 +187,7 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 		async (ctx) => {
 			const pendingTx1 = makePendingTx();
 			const pendingTxs = [pendingTx1];
+			const currentTime = new Date("2025-01-01T00:00:02Z");
 			ctx.transactionRepoMock.getAllPending.mockResolvedValue(pendingTxs);
 			ctx.chainsApiMock.getTransaction.mockResolvedValue({
 				data: {
@@ -140,21 +196,31 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 					},
 				},
 			});
+			ctx.clockMock.getCurrentTime.mockReturnValue(currentTime);
 
-			await ctx.transactionChecker.updatePendingTransactions();
+			await ctx.transactionChecker.updatePendingTxs();
 
 			expect(ctx.transactionRepoMock.update).toHaveBeenCalledWith({
 				...pendingTx1,
 				status: "confirmed",
+				updatedAt: currentTime,
 			});
 		},
 	);
 
 	testFixture(
-		"updates transaction status to failed if it is no longer found",
+		"updates transaction status to failed if it is no longer found after grace period",
 		async (ctx) => {
-			const pendingTx1 = makePendingTx();
+			const pendingTx1 = makePendingTx({
+				submittedAt: new Date("2025-01-01T00:00:00Z"),
+			});
 			const pendingTxs = [pendingTx1];
+			const passedSeconds = ctx.discardedTxGracePeriodSeconds + 1;
+			const currentTime = addSeconds(
+				pendingTx1.submittedAt,
+				passedSeconds,
+			);
+			ctx.clockMock.getCurrentTime.mockReturnValue(currentTime);
 			ctx.transactionRepoMock.getAllPending.mockResolvedValue(pendingTxs);
 			ctx.chainsApiMock.getTransaction.mockResolvedValue({
 				status: 404,
@@ -163,11 +229,12 @@ describe("TransactionChecker.updatePendingTransactions", () => {
 				},
 			});
 
-			await ctx.transactionChecker.updatePendingTransactions();
+			await ctx.transactionChecker.updatePendingTxs();
 
 			expect(ctx.transactionRepoMock.update).toHaveBeenCalledWith({
 				...pendingTx1,
 				status: "failed",
+				updatedAt: currentTime,
 			});
 		},
 	);

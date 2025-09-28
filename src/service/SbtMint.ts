@@ -1,10 +1,15 @@
 import * as MultiBaas from "@curvegrid/multibaas-sdk";
 import { isAxiosError } from "axios";
 import { ethers } from "ethers";
-import { EthereumAddress, TransactionHash, TransactionState } from "../core.js";
 import { ILogObj, Logger } from "tslog";
 import { TransactionRepo } from "../repo/TransactionRepo.js";
 import { Clock } from "./Clock.js";
+import {
+	EthereumTransaction,
+	EthereumTransactionHash,
+} from "../domain/EthereumTransaction.js";
+import { EthereumAddress } from "../domain/EthereumAddress.js";
+import { ethereumAddressFrom, numberFromHexString } from "../core.js";
 
 type SignedTransaction = string;
 
@@ -52,8 +57,8 @@ export class SbtMintStateQueryError extends SbtMintError {
 }
 
 export interface SbtMint {
-	startMinting(to: EthereumAddress): Promise<TransactionHash>;
-	getSbtState(txHash: TransactionHash): Promise<TransactionState>;
+	startMinting(to: EthereumAddress): Promise<EthereumTransactionHash>;
+	getSbtState(txHash: EthereumTransactionHash): Promise<EthereumTransaction>;
 }
 
 export class SbtMintImpl implements SbtMint {
@@ -88,16 +93,18 @@ export class SbtMintImpl implements SbtMint {
 	 * @param to SBT receiver Ethereum address.
 	 * @returns submitted minting transaction hash.
 	 */
-	async startMinting(to: EthereumAddress): Promise<TransactionHash> {
+	async startMinting(to: EthereumAddress): Promise<EthereumTransactionHash> {
 		this.logger.info("Starting minting SBT", { to });
-		const tx = await this.makeSbtMintTx(this.wallet.address, to);
-		const signedTx = await this.signTx(tx);
-		const txHash = await this.sendSignedTx(signedTx);
-		await this.saveTxState(txHash);
-		return txHash;
+		const txToSign = await this.makeSbtMintTx(this.wallet.address, to);
+		const signedTx = await this.signTx(txToSign);
+		const submittedTx = await this.sendSignedTx(signedTx);
+		await this.saveTxState(submittedTx);
+		return submittedTx.hash;
 	}
 
-	async getSbtState(txHash: TransactionHash): Promise<TransactionState> {
+	async getSbtState(
+		txHash: EthereumTransactionHash,
+	): Promise<EthereumTransaction> {
 		const tx = await this.transactionRepo.get(txHash);
 		if (!tx) {
 			throw new SbtMintStateQueryError(
@@ -192,7 +199,7 @@ export class SbtMintImpl implements SbtMint {
 
 	private async sendSignedTx(
 		signedTx: SignedTransaction,
-	): Promise<TransactionHash> {
+	): Promise<EthereumTransaction> {
 		try {
 			const response = await this.chainsApi.submitSignedTransaction(
 				this.chain,
@@ -201,8 +208,23 @@ export class SbtMintImpl implements SbtMint {
 				},
 			);
 			const result = response.data.result;
+			const tx = result.tx;
+			const submissionTime = this.clock.getCurrentTime();
 			this.logger.info("Transaction submitted", { result });
-			return result.tx.hash;
+
+			// TODO: validate MultiBaas API response
+			return {
+				hash: result.tx.hash,
+				status: "pending",
+				from: tx.from ?? null, // for some reason the API returns null here, even though "from" is known at signature time.
+				to: tx.to as EthereumAddress,
+				value: numberFromHexString(tx.value ?? "0x0"),
+				nonce: numberFromHexString(tx.nonce ?? "0x0"),
+				gasLimit: numberFromHexString(tx.gas ?? "0x0"),
+				blockNumber: null,
+				submittedAt: submissionTime,
+				updatedAt: submissionTime,
+			};
 		} catch (e) {
 			throw new SbtMintSubmissionError(
 				"Failed to submit signed transaction",
@@ -211,17 +233,11 @@ export class SbtMintImpl implements SbtMint {
 		}
 	}
 
-	private async saveTxState(txHash: TransactionHash) {
+	private async saveTxState(tx: EthereumTransaction) {
 		try {
-			const submissionTime = this.clock.getCurrentTime();
-			await this.transactionRepo.create({
-				hash: txHash,
-				status: "pending",
-				submissionTime,
-			});
+			await this.transactionRepo.create(tx);
 			this.logger.info("Pending SBT transaction state saved", {
-				txHash,
-				submissionTime,
+				tx,
 			});
 		} catch (e) {
 			throw new SbtMintStateSavingError(

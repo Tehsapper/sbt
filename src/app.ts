@@ -56,6 +56,8 @@ const sbtMint = new SbtMintImpl(
 const transactionChecker = new TransactionCheckerImpl(
 	transactionRepo,
 	multiBaasChainsApi,
+	clock,
+	config.discardedTxGracePeriodSeconds,
 	makeLogger("TransactionChecker"),
 );
 

@@ -12,6 +12,7 @@ export type Config = {
 		basePath: string;
 	};
 	txStatusPollingIntervalSeconds: number;
+	discardedTxGracePeriodSeconds: number;
 	postgres: PostgresConfig;
 	server: {
 		hostname: string;
@@ -38,6 +39,9 @@ export function configFromProcessEnv(): Config {
 		},
 		txStatusPollingIntervalSeconds: parseInt(
 			fromProcessEnv("TX_STATUS_POLLING_INTERVAL_SECONDS"),
+		),
+		discardedTxGracePeriodSeconds: parseInt(
+			fromProcessEnv("DISCARDED_TX_GRACE_PERIOD_SECONDS"),
 		),
 		postgres: {
 			host: fromProcessEnv("POSTGRES_HOST"),
