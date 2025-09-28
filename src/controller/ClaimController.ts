@@ -1,53 +1,67 @@
 import { Request, Response } from "express";
-import { SbtMint } from "../service/SbtMint.js";
-import { Logger, ILogObj } from "tslog";
-import { ethereumAddressFrom, validSignature } from "../core.js";
+import { SbtMint, SbtMintStateQueryError } from "../service/SbtMint.js";
+import {
+	ethereumAddressFrom,
+	transactionHashFrom,
+	validSignature,
+} from "../core.js";
+import {
+	BadRequestError,
+	InternalServerError,
+	NotFoundError,
+	UnauthorizedError,
+} from "./ApiError.js";
+import { getQueryParam } from "./validation.js";
 
 export class ClaimController {
 	private sbtMint: SbtMint;
-	private logger: Logger<ILogObj>;
 
-	constructor(
-		sbtMint: SbtMint,
-		logger: Logger<ILogObj> = new Logger({
-			name: "ClaimController",
-		}),
-	) {
+	constructor(sbtMint: SbtMint) {
 		this.sbtMint = sbtMint;
-		this.logger = logger;
+	}
+
+	async handleGetStatus(req: Request, res: Response): Promise<void> {
+		const txHash = getQueryParam(req, "txHash");
+		if (!transactionHashFrom(txHash)) {
+			throw new BadRequestError(
+				`"txHash" query parameter is not a valid transaction hash`,
+			);
+		}
+		try {
+			const state = await this.sbtMint.getSbtState(txHash);
+			res.status(200).json(state);
+		} catch (error) {
+			if (error instanceof SbtMintStateQueryError) {
+				throw new NotFoundError(
+					`SBT state not found for tx hash: ${txHash}`,
+					error,
+				);
+			}
+			throw new InternalServerError(
+				`Failed to get SBT state for tx hash: ${txHash}`,
+				error,
+			);
+		}
 	}
 
 	async handleClaim(req: Request, res: Response): Promise<void> {
-		const to = req.query.to as string;
-		if (!to) {
-			res.status(400).json({ error: '"to" query parameter is required' });
-			return;
-		}
+		const to = getQueryParam(req, "to");
 		if (!ethereumAddressFrom(to)) {
-			res.status(400).json({
-				error: '"to" query parameter is not a valid Ethereum address',
-			});
-			return;
+			throw new BadRequestError(
+				'"to" query parameter is not a valid Ethereum address',
+			);
 		}
-		const signature = req.query.signature as string;
-		if (!signature) {
-			res.status(400).json({
-				error: '"signature" query parameter is required',
-			});
-			return;
+
+		const signature = getQueryParam(req, "signature");
+		if (!validSignature(to, signature, to)) {
+			throw new UnauthorizedError("Could not verify signature");
 		}
-		const verified = validSignature(to, signature, to);
-		if (!verified) {
-			this.logger.warn("Could not verify signature", { to, signature });
-			res.status(401).json({ error: "Could not verify signature" });
-			return;
-		}
+
 		try {
 			const txHash = await this.sbtMint.startMinting(to);
-			res.status(200).json({ txHash });
+			res.status(200).json({ txHash: txHash });
 		} catch (error) {
-			this.logger.error("Failed to start minting", { error });
-			res.status(500).json({ error: "Failed to start minting" });
+			throw new InternalServerError("Failed to start minting", error);
 		}
 	}
 }

@@ -11,7 +11,7 @@ export class TransactionStatusPoll {
 	constructor(
 		transactionChecker: TransactionChecker,
 		pollingIntervalSeconds: number,
-		logger: Logger<ILogObj> = new Logger({ name: "TransactionStatusPoll" }),
+		logger: Logger<ILogObj>,
 	) {
 		this.transactionChecker = transactionChecker;
 		this.pollingIntervalMs = pollingIntervalSeconds * 1000;

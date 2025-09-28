@@ -1,45 +1,51 @@
 import * as MultiBaas from "@curvegrid/multibaas-sdk";
 import { isAxiosError } from "axios";
 import { ethers } from "ethers";
-import { EthereumAddress, TransactionHash } from "../core.js";
+import { EthereumAddress, TransactionHash, TransactionState } from "../core.js";
 import { ILogObj, Logger } from "tslog";
 import { TransactionRepo } from "../repo/TransactionRepo.js";
 import { Clock } from "./Clock.js";
 
 type SignedTransaction = string;
 
-export class SbtMintFailure extends Error {
+export class SbtMintError extends Error {
 	constructor(message: string, cause?: unknown) {
 		super(message);
 		this.cause = cause;
 	}
 }
 
-export class SbtMintContractCallFailure extends SbtMintFailure {
+export class SbtMintContractCallError extends SbtMintError {
 	constructor(message: string, cause?: unknown) {
 		super(message, cause);
 	}
 }
 
-export class SbtMintChainQueryFailure extends SbtMintFailure {
+export class SbtMintChainQueryError extends SbtMintError {
 	constructor(message: string, cause: unknown) {
 		super(message, cause);
 	}
 }
 
-export class SbtMintSigningFailure extends SbtMintFailure {
+export class SbtMintSigningError extends SbtMintError {
 	constructor(message: string, cause: unknown) {
 		super(message, cause);
 	}
 }
 
-export class SbtMintSubmissionFailure extends SbtMintFailure {
+export class SbtMintSubmissionError extends SbtMintError {
 	constructor(message: string, cause: unknown) {
 		super(message, cause);
 	}
 }
 
-export class SbtMintStateSavingFailure extends SbtMintFailure {
+export class SbtMintStateSavingError extends SbtMintError {
+	constructor(message: string, cause?: unknown) {
+		super(message, cause);
+	}
+}
+
+export class SbtMintStateQueryError extends SbtMintError {
 	constructor(message: string, cause?: unknown) {
 		super(message, cause);
 	}
@@ -47,6 +53,7 @@ export class SbtMintStateSavingFailure extends SbtMintFailure {
 
 export interface SbtMint {
 	startMinting(to: EthereumAddress): Promise<TransactionHash>;
+	getSbtState(txHash: TransactionHash): Promise<TransactionState>;
 }
 
 export class SbtMintImpl implements SbtMint {
@@ -64,10 +71,8 @@ export class SbtMintImpl implements SbtMint {
 		transactionRepo: TransactionRepo,
 		clock: Clock,
 		wallet: ethers.Wallet,
+		logger: Logger<ILogObj>,
 		chain: MultiBaas.ChainName = MultiBaas.ChainName.Ethereum,
-		logger: Logger<ILogObj> = new Logger({
-			name: "SbtMint",
-		}),
 	) {
 		this.contractsApi = contractsApi;
 		this.chainsApi = chainsApi;
@@ -90,6 +95,16 @@ export class SbtMintImpl implements SbtMint {
 		const txHash = await this.sendSignedTx(signedTx);
 		await this.saveTxState(txHash);
 		return txHash;
+	}
+
+	async getSbtState(txHash: TransactionHash): Promise<TransactionState> {
+		const tx = await this.transactionRepo.get(txHash);
+		if (!tx) {
+			throw new SbtMintStateQueryError(
+				`SBT transaction ${txHash} not found`,
+			);
+		}
+		return tx;
 	}
 
 	private async makeSbtMintTx(
@@ -119,19 +134,19 @@ export class SbtMintImpl implements SbtMint {
 				result,
 			);
 			if (result.kind !== "TransactionToSignResponse") {
-				throw new SbtMintContractCallFailure(
+				throw new SbtMintContractCallError(
 					"Expected TransactionToSignResponse, got " + result.kind,
 				);
 			}
 			return result.tx;
 		} catch (e) {
 			if (isAxiosError(e)) {
-				throw new SbtMintContractCallFailure(
+				throw new SbtMintContractCallError(
 					`MultiBaas contract call API failed with status code '${e.response?.data.status}' and message: ${e.response?.data.message}`,
 					e,
 				);
 			}
-			throw new SbtMintContractCallFailure(
+			throw new SbtMintContractCallError(
 				"Failed to call contract function",
 				e,
 			);
@@ -144,7 +159,7 @@ export class SbtMintImpl implements SbtMint {
 			const response = await this.chainsApi.getChainStatus(this.chain);
 			return response.data.result.chainID;
 		} catch (e) {
-			throw new SbtMintChainQueryFailure("Failed to get chain status", e);
+			throw new SbtMintChainQueryError("Failed to get chain status", e);
 		}
 	}
 
@@ -171,7 +186,7 @@ export class SbtMintImpl implements SbtMint {
 			this.logger.info("Transaction signed", { signedTx });
 			return signedTx;
 		} catch (e) {
-			throw new SbtMintSigningFailure("Failed to sign transaction", e);
+			throw new SbtMintSigningError("Failed to sign transaction", e);
 		}
 	}
 
@@ -189,7 +204,7 @@ export class SbtMintImpl implements SbtMint {
 			this.logger.info("Transaction submitted", { result });
 			return result.tx.hash;
 		} catch (e) {
-			throw new SbtMintSubmissionFailure(
+			throw new SbtMintSubmissionError(
 				"Failed to submit signed transaction",
 				e,
 			);
@@ -209,7 +224,7 @@ export class SbtMintImpl implements SbtMint {
 				submissionTime,
 			});
 		} catch (e) {
-			throw new SbtMintStateSavingFailure(
+			throw new SbtMintStateSavingError(
 				"Failed to save transaction state",
 				e,
 			);

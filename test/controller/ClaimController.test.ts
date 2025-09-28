@@ -1,13 +1,20 @@
 import { ClaimController } from "../../src/controller/ClaimController.js";
+import {
+	BadRequestError,
+	InternalServerError,
+	UnauthorizedError,
+} from "../../src/controller/ApiError.js";
 import { SbtMint } from "../../src/service/SbtMint.js";
 import { Request, Response } from "express";
-import { ILogObj, Logger } from "tslog";
 
 class SbtMintMock implements SbtMint {
 	startMinting = jest.fn();
+	getSbtState = jest.fn();
 }
 
-function requestWithQueryParams(query: Record<string, string>): Request {
+function requestWithQueryParams(
+	query: Record<string, string | string[]>,
+): Request {
 	return { query } as unknown as Request;
 }
 
@@ -27,19 +34,16 @@ const validTxHash =
 
 type TestContext = {
 	sbtMintMock: SbtMintMock;
-	hiddenLogger: Logger<ILogObj>;
 	claimController: ClaimController;
 };
 
 function testFixture(name: string, fn: (ctx: TestContext) => Promise<void>) {
 	test(name, async () => {
 		const sbtMintMock = new SbtMintMock();
-		const hiddenLogger = new Logger<ILogObj>({ type: "hidden" });
-		const claimController = new ClaimController(sbtMintMock, hiddenLogger);
+		const claimController = new ClaimController(sbtMintMock);
 
 		fn({
 			sbtMintMock,
-			hiddenLogger,
 			claimController,
 		});
 	});
@@ -47,52 +51,71 @@ function testFixture(name: string, fn: (ctx: TestContext) => Promise<void>) {
 
 describe("ClaimController.handleClaim", () => {
 	testFixture(
-		"responds with 400 status code and JSON body with error message if 'to' query parameter is not provided",
+		"throws BadRequestError if 'to' query parameter is not provided",
 		async (ctx) => {
 			const req = requestWithQueryParams({});
 			const res = mockResponse();
 
-			await ctx.claimController.handleClaim(req, res);
-
-			expect(res.status).toHaveBeenCalledWith(400);
-			expect(res.json).toHaveBeenCalledWith({
-				error: '"to" query parameter is required',
-			});
+			await expect(
+				ctx.claimController.handleClaim(req, res),
+			).rejects.toThrow(BadRequestError);
 		},
 	);
 
 	testFixture(
-		"responds with 400 status code and JSON body with error message if 'to' query parameter is not a valid Ethereum address",
+		"throws BadRequestError if multiple 'to' query parameters are provided",
+		async (ctx) => {
+			const req = requestWithQueryParams({
+				to: [validAddress, validAddress],
+			});
+			const res = mockResponse();
+
+			await expect(
+				ctx.claimController.handleClaim(req, res),
+			).rejects.toThrow(BadRequestError);
+		},
+	);
+
+	testFixture(
+		"throws BadRequestError if 'to' query parameter is not a valid Ethereum address",
 		async (ctx) => {
 			const req = requestWithQueryParams({ to: "invalid" });
 			const res = mockResponse();
 
-			await ctx.claimController.handleClaim(req, res);
-
-			expect(res.status).toHaveBeenCalledWith(400);
-			expect(res.json).toHaveBeenCalledWith({
-				error: '"to" query parameter is not a valid Ethereum address',
-			});
+			await expect(
+				ctx.claimController.handleClaim(req, res),
+			).rejects.toThrow(BadRequestError);
 		},
 	);
 
 	testFixture(
-		"responds with 400 status code and JSON body with error message if 'signature' query parameter is not provided",
+		"throws BadRequestError if 'signature' query parameter is not provided",
 		async (ctx) => {
 			const req = requestWithQueryParams({ to: validAddress });
 			const res = mockResponse();
 
-			await ctx.claimController.handleClaim(req, res);
-
-			expect(res.status).toHaveBeenCalledWith(400);
-			expect(res.json).toHaveBeenCalledWith({
-				error: '"signature" query parameter is required',
-			});
+			await expect(
+				ctx.claimController.handleClaim(req, res),
+			).rejects.toThrow(BadRequestError);
 		},
 	);
 
 	testFixture(
-		"responds with 401 status code and JSON body with error message if signature is invalid",
+		"throws BadRequestError if multiple 'signature' query parameters are provided",
+		async (ctx) => {
+			const req = requestWithQueryParams({
+				signature: [validSignature, validSignature],
+			});
+			const res = mockResponse();
+
+			await expect(
+				ctx.claimController.handleClaim(req, res),
+			).rejects.toThrow(BadRequestError);
+		},
+	);
+
+	testFixture(
+		"throws UnauthorizedError if signature is invalid",
 		async (ctx) => {
 			const req = requestWithQueryParams({
 				to: validAddress,
@@ -100,36 +123,27 @@ describe("ClaimController.handleClaim", () => {
 			});
 			const res = mockResponse();
 
-			await ctx.claimController.handleClaim(req, res);
-
-			expect(res.status).toHaveBeenCalledWith(401);
-			expect(res.json).toHaveBeenCalledWith({
-				error: "Could not verify signature",
-			});
+			await expect(
+				ctx.claimController.handleClaim(req, res),
+			).rejects.toThrow(UnauthorizedError);
 		},
 	);
 
-	testFixture(
-		"responds with 500 status code and JSON body with error message if minting fails",
-		async (ctx) => {
-			ctx.sbtMintMock.startMinting.mockRejectedValue(
-				new Error("Failed to start minting"),
-			);
+	testFixture("throws InternalServerError if minting fails", async (ctx) => {
+		ctx.sbtMintMock.startMinting.mockRejectedValue(
+			new Error("Failed to start minting"),
+		);
 
-			const req = requestWithQueryParams({
-				to: validAddress,
-				signature: validSignature,
-			});
-			const res = mockResponse();
+		const req = requestWithQueryParams({
+			to: validAddress,
+			signature: validSignature,
+		});
+		const res = mockResponse();
 
-			await ctx.claimController.handleClaim(req, res);
-
-			expect(res.status).toHaveBeenCalledWith(500);
-			expect(res.json).toHaveBeenCalledWith({
-				error: "Failed to start minting",
-			});
-		},
-	);
+		await expect(ctx.claimController.handleClaim(req, res)).rejects.toThrow(
+			InternalServerError,
+		);
+	});
 
 	testFixture(
 		"responds with 200 status code and JSON body with result transaction hash if minting starts successfully",

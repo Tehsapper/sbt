@@ -4,6 +4,6 @@ export interface TransactionRepo {
 	setup(): Promise<void>;
 	create(tx: TransactionState): Promise<void>;
 	update(tx: TransactionState): Promise<void>;
-	get(txHash: TransactionHash): Promise<TransactionState | undefined>;
+	get(txHash: TransactionHash): Promise<TransactionState | null>;
 	getAllPending(): Promise<TransactionState[]>;
 }

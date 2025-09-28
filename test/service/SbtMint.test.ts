@@ -1,11 +1,11 @@
 import { ILogObj, Logger } from "tslog";
 import {
-	SbtMintContractCallFailure,
-	SbtMintChainQueryFailure,
+	SbtMintContractCallError,
 	SbtMintImpl,
-	SbtMintSigningFailure,
-	SbtMintSubmissionFailure,
-	SbtMintStateSavingFailure,
+	SbtMintSigningError,
+	SbtMintSubmissionError,
+	SbtMintStateSavingError,
+	SbtMintChainQueryError,
 } from "../../src/service/SbtMint.js";
 import * as MultiBaas from "@curvegrid/multibaas-sdk";
 import * as ethers from "ethers";
@@ -116,8 +116,8 @@ function testFixture(name: string, fn: (ctx: TestContext) => Promise<void>) {
 			transactionRepo,
 			clock,
 			walletMock,
-			"ethereum",
 			hiddenLogger,
+			MultiBaas.ChainName.Ethereum,
 		);
 		await fn({
 			contractsApiMock,
@@ -137,7 +137,7 @@ describe("SbtMint.startMinting", () => {
 			new Error("Contract call failed"),
 		);
 		await expect(ctx.sbtMint.startMinting(validAddress)).rejects.toThrow(
-			SbtMintContractCallFailure,
+			SbtMintContractCallError,
 		);
 	});
 
@@ -155,7 +155,7 @@ describe("SbtMint.startMinting", () => {
 		);
 
 		await expect(ctx.sbtMint.startMinting(validAddress)).rejects.toThrow(
-			SbtMintChainQueryFailure,
+			SbtMintChainQueryError,
 		);
 	});
 
@@ -165,7 +165,7 @@ describe("SbtMint.startMinting", () => {
 		);
 
 		await expect(ctx.sbtMint.startMinting(validAddress)).rejects.toThrow(
-			SbtMintSigningFailure,
+			SbtMintSigningError,
 		);
 	});
 
@@ -178,7 +178,7 @@ describe("SbtMint.startMinting", () => {
 
 			await expect(
 				ctx.sbtMint.startMinting(validAddress),
-			).rejects.toThrow(SbtMintSubmissionFailure);
+			).rejects.toThrow(SbtMintSubmissionError);
 		},
 	);
 
@@ -190,7 +190,7 @@ describe("SbtMint.startMinting", () => {
 			);
 			await expect(
 				ctx.sbtMint.startMinting(validAddress),
-			).rejects.toThrow(SbtMintStateSavingFailure);
+			).rejects.toThrow(SbtMintStateSavingError);
 		},
 	);
 

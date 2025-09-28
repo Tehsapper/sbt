@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 
-// TODO: consider making this an opaque type
+// TODO: consider making these opaque types
 export type EthereumAddress = string;
 export type TransactionHash = string;
 
@@ -11,6 +11,13 @@ export type TransactionState = {
 	hash: TransactionHash;
 	submissionTime: Date;
 };
+
+export function transactionHashFrom(rawHash: string): TransactionHash | null {
+	if (!ethers.isHexString(rawHash, 32)) {
+		return null;
+	}
+	return rawHash as TransactionHash;
+}
 
 export function ethereumAddressFrom(
 	rawAddress: string,

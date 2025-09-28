@@ -14,11 +14,11 @@ export class PostgresTransactionRepo implements TransactionRepo {
 			.sql`CREATE TABLE IF NOT EXISTS transactions (hash TEXT PRIMARY KEY, status TEXT, submission_time TIMESTAMP)`;
 	}
 
-	async get(hash: string): Promise<TransactionState> {
+	async get(hash: string): Promise<TransactionState | null> {
 		const rows = await this
 			.sql`SELECT hash, status, submission_time FROM transactions WHERE hash = ${hash}`;
 		if (rows.length === 0) {
-			throw new Error(`Transaction ${hash} not found`);
+			return null;
 		}
 		return {
 			hash: rows[0].hash,

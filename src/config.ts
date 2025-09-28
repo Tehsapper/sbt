@@ -1,16 +1,18 @@
+export type PostgresConfig = {
+	host: string;
+	port: number;
+	user: string;
+	password: string;
+	database: string;
+};
+
 export type Config = {
 	multiBaas: {
 		apiKey: string;
 		basePath: string;
 	};
 	txStatusPollingIntervalSeconds: number;
-	postgres: {
-		host: string;
-		port: number;
-		user: string;
-		password: string;
-		database: string;
-	};
+	postgres: PostgresConfig;
 	server: {
 		hostname: string;
 		port: number;

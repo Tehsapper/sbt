@@ -45,7 +45,7 @@ export class TransactionCheckerImpl implements TransactionChecker {
 	constructor(
 		transactionRepo: TransactionRepo,
 		chainsApi: MultiBaas.ChainsApi,
-		logger: Logger<ILogObj> = new Logger({ name: "TransactionChecker" }),
+		logger: Logger<ILogObj>,
 	) {
 		this.transactionRepo = transactionRepo;
 		this.chainsApi = chainsApi;
