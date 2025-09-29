@@ -6,11 +6,13 @@ It utilizes MultiBaaS platform for blockchain interop.
 
 It serves HTTP API that allows:
 * claiming an SBT for given address
-* checking SBT state given minting transaction hash
+* checking SBT state (including token data once minted) given minting transaction hash
 
 You can check the OpenAPI specs at `openapi-spec.yml`.
 
-It spawns a background process that polls recent blockchain events for the SBT contract. This allows updating pending SBTs state by looking for `Issued` events.
+It mints SBTs by calling `sbt` contract `safeTransfer` function via submitted Ethereum transaction signed by service wallet private key. As minting transaction might take a (long) while to complete, it returns transaction hash to users. This allows them to check SBT status using HTTP API.
+
+It spawns a background process that polls recent blockchain events for the SBT contract. This allows updating pending SBTs state by looking for `Issued` events, which are emitted when minting transaction succeeds.
 
 ## Considerations
 
