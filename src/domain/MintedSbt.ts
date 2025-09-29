@@ -16,7 +16,12 @@ export type MintedSbt = {
 	status: EthereumTransactionStatus;
 };
 
-export function maybeTokenData(
+/**
+ * Returns JSON encoded in base64 data URL with JSON MIME type.
+ *
+ * @returns JSON or null if tokenUri is not a data URL with JSON MIME type and base64 encoding.
+ */
+export function parseTokenDataFrom(
 	tokenUri: string | null,
 ): { tokenData: any } | null {
 	if (!tokenUri) {

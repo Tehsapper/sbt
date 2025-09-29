@@ -5,7 +5,7 @@ import {
 	EthereumTransactionStatus,
 } from "../domain/EthereumTransaction.js";
 import { Clock } from "./Clock.js";
-import { EthereumAddress } from "../core.js";
+import { EthereumAddress } from "../domain/EthereumAddress.js";
 import { MintedSbt } from "../domain/MintedSbt.js";
 import { SbtRepo } from "../repo/SbtRepo.js";
 
@@ -89,6 +89,9 @@ export class SbtCheckerImpl implements SbtChecker {
 		this.logger = logger;
 	}
 
+	/**
+	 * Polls the blockchain for recent events and updates currently pending SBTs accordingly.
+	 */
 	async updatePending(): Promise<void> {
 		const pendingSbts = await this.getAllKnownPendingSbts();
 
@@ -208,7 +211,7 @@ export class SbtCheckerImpl implements SbtChecker {
 			);
 			const events = response.data.result;
 			const sbtEvents = events.flatMap(sbtEventFrom);
-			this.logger.info("Got events", { sbtEvents });
+			this.logger.debug("Got events", { sbtEvents });
 			return sbtEvents;
 		} catch (error) {
 			throw new SbtCheckerApiRetrievalError(

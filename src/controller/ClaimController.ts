@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { SbtMint, SbtMintStateQueryError } from "../service/SbtMint.js";
 import {
 	ethereumAddressFrom,
-	transactionHashFrom,
+	ethereumTxHashFrom,
 	validSignature,
 } from "../core.js";
 import {
@@ -12,7 +12,7 @@ import {
 	UnauthorizedError,
 } from "./ApiError.js";
 import { getQueryParam } from "./validation.js";
-import { maybeTokenData } from "../domain/MintedSbt.js";
+import { parseTokenDataFrom } from "../domain/MintedSbt.js";
 
 export class ClaimController {
 	private sbtMint: SbtMint;
@@ -23,14 +23,15 @@ export class ClaimController {
 
 	async handleGetStatus(req: Request, res: Response): Promise<void> {
 		const txHash = getQueryParam(req, "txHash");
-		if (!transactionHashFrom(txHash)) {
+		if (!ethereumTxHashFrom(txHash)) {
 			throw new BadRequestError(
 				`"txHash" query parameter is not a valid transaction hash`,
 			);
 		}
 		try {
 			const state = await this.sbtMint.getSbt(txHash);
-			const tokenData = maybeTokenData(state.tokenUri);
+			// Add decoded token data JSON from token URI to response, if present
+			const tokenData = parseTokenDataFrom(state.tokenUri);
 			const result = Object.assign({}, state, tokenData);
 			res.status(200).json(result);
 		} catch (error) {
@@ -57,7 +58,9 @@ export class ClaimController {
 
 		const signature = getQueryParam(req, "signature");
 		if (!validSignature(to, signature, to)) {
-			throw new UnauthorizedError("Could not verify signature");
+			throw new UnauthorizedError(
+				'Could not verify signature of "to" address',
+			);
 		}
 
 		try {

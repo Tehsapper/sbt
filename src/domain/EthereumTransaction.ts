@@ -1,4 +1,4 @@
-import { EthereumAddress } from "../core.js";
+import { EthereumAddress } from "./EthereumAddress.js";
 
 export type EthereumTransactionHash = string;
 

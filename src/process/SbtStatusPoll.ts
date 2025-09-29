@@ -1,5 +1,6 @@
 import { SbtChecker } from "../service/SbtChecker.js";
 import { Logger, ILogObj } from "tslog";
+import { slimError } from "../core.js";
 
 export class SbtStatusPoll {
 	private sbtChecker: SbtChecker;
@@ -52,7 +53,9 @@ export class SbtStatusPoll {
 			this.isPolling = true;
 			await this.sbtChecker.updatePending();
 		} catch (error) {
-			this.logger.error("Error updating pending transactions", { error });
+			this.logger.error("Error updating pending transactions", {
+				error: slimError(error),
+			});
 		} finally {
 			this.isPolling = false;
 		}
